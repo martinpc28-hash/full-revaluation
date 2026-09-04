@@ -1,0 +1,99 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  EC2 instance self-hosting Oracle Database Free (no license cost) for the
+  Full Revaluation demo, as a zero-license-fee replacement for RDS Oracle
+  (License Included). Only cost is the EC2 instance itself, which can fall
+  under the AWS Free Tier for new accounts. Stop the instance when not in
+  use to avoid charges; the EBS volume keeps billing while stopped, so
+  delete the stack entirely once you're done demoing.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Public subnet (needed so you can reach it to install/manage; lock down AllowedSshCidr below)
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Existing EC2 key pair for SSH access
+  AllowedSshCidr:
+    Type: String
+    Description: Your IP in CIDR form, e.g. 203.0.113.5/32 — never leave this as 0.0.0.0/0
+  AllowedAppCidr:
+    Type: String
+    Description: CIDR allowed to reach Oracle on port 1521 (e.g. your Elastic Beanstalk security group's CIDR)
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues: [t3.micro, t4g.micro, t3.small]
+  OraclePassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Description: Password for the Oracle Database Free ADMIN/system user
+
+Resources:
+  OracleSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SSH from your IP, Oracle listener from the app tier only
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref AllowedSshCidr
+        - IpProtocol: tcp
+          FromPort: 1521
+          ToPort: 1521
+          CidrIp: !Ref AllowedAppCidr
+
+  OracleInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPairName
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds:
+        - !Ref OracleSecurityGroup
+      ImageId: "{{resolve:ssm:/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id}}"
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+      Tags:
+        - Key: Name
+          Value: fullreval-oracle-free
+      # NOTE: Oracle's download page normally requires clicking through a
+      # license-acceptance form in a browser before the .deb is servable,
+      # so the wget below may need a direct signed URL you grab manually
+      # from https://www.oracle.com/database/free/ first (right-click the
+      # download button after accepting the license) and paste in below.
+      # This is a restriction from Oracle's distribution terms, not AWS.
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          # Oracle Database Free ships as a .deb for Ubuntu/Debian-family hosts.
+          apt-get update -y
+          apt-get install -y wget libaio1 unzip
+
+          cd /tmp
+          wget -q "REPLACE_WITH_SIGNED_ORACLE_DOWNLOAD_URL" -O oracle-free.deb
+
+          # Pre-seed the ADMIN password non-interactively.
+          echo "oracle-database-free-23ai oracle-database-free-23ai/oracle-admin-password password ${OraclePassword}" | debconf-set-selections
+          echo "oracle-database-free-23ai oracle-database-free-23ai/oracle-admin-password-confirm password ${OraclePassword}" | debconf-set-selections
+
+          apt-get install -y ./oracle-free.deb
+
+          # Listener defaults to 1521 on install; open it externally via the security group above.
+          echo "Oracle Database Free install complete. Service name: FREEPDB1"
+
+Outputs:
+  InstancePublicIp:
+    Value: !GetAtt OracleInstance.PublicIp
+    Description: Point DB_HOST at this IP; DB_SERVICE_NAME=FREEPDB1, DB_PORT=1521
+  InstanceId:
+    Value: !Ref OracleInstance

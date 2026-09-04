@@ -1,0 +1,99 @@
+spring:
+  application:
+    name: full-revaluation
+
+  datasource:
+    # In AWS these come from environment variables set in Elastic Beanstalk /
+    # EC2 (never hardcode credentials). Point at the RDS Oracle endpoint.
+    url: jdbc:oracle:thin:@${DB_HOST}:${DB_PORT:1521}/${DB_SERVICE_NAME}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: oracle.jdbc.OracleDriver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+
+  jpa:
+    hibernate:
+      ddl-auto: validate   # schema is owned by sql/schema.sql, not by Hibernate auto-DDL
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.OracleDialect
+        format_sql: true
+    show-sql: false
+
+server:
+  port: 8080
+
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+  datasource:
+    url: jdbc:h2:mem:fullreval;MODE=Oracle
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      # Fresh DB every run is what you want for local dev — deliberately NOT
+      # what the deployed "demo" profile below does.
+      ddl-auto: create-drop
+
+---
+# Used by the deployed EC2 demo instance. Same H2 engine as "local", but
+# file-backed instead of in-memory, and ddl-auto: update instead of
+# create-drop — so data on the running instance survives a service restart,
+# a `systemctl restart`, or an instance reboot. It does NOT survive
+# terminating the instance (its disk goes with it) — for that you need a
+# real managed database (RDS), which is a separate, billed step.
+# Deliberately NOT MODE=Oracle here, and dialect explicitly overridden back
+# to H2 (the base config block above forces OracleDialect for the real-Oracle
+# profile, and profile blocks in Spring inherit unset properties from it).
+# With OracleDialect forced, Hibernate's schema-update path queries an
+# Oracle-only system catalog (ALL_SEQUENCES) to see what already exists —
+# and on a brand-new empty H2 file, that query fails outright ("this
+# database is empty"), crash-looping the service. Nothing in the app depends
+# on Oracle SQL syntax (everything goes through JPA), so this is cosmetic.
+spring:
+  config:
+    activate:
+      on-profile: demo
+  datasource:
+    url: jdbc:h2:file:/opt/app/data/fullreval
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+
+---
+# The deployed instance's real database: Amazon RDS for PostgreSQL, private
+# (not internet-reachable — only the app's own security group can connect),
+# encrypted at rest, with automated daily backups. Survives the EC2 instance
+# being replaced or lost entirely, which the "demo" (H2-on-disk) profile
+# above does not. DB_PASSWORD is fetched from SSM Parameter Store by the
+# instance's startup script, not baked into the image or the jar.
+spring:
+  config:
+    activate:
+      on-profile: rds
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME:fullreval}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect

@@ -1,0 +1,65 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  RDS Oracle instance for the Full Revaluation demo project.
+  Minimal single-AZ db.t3.micro to keep cost down. Delete the stack
+  (not just stop the instance) when not actively developing/demoing,
+  since storage keeps billing while stopped.
+
+Parameters:
+  DBMasterUsername:
+    Type: String
+    Default: fullreval_admin
+  DBMasterPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+  AllowedIngressCidr:
+    Type: String
+    Description: CIDR allowed to reach 1521 (lock this to your IP or the EB security group, never 0.0.0.0/0)
+
+Resources:
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for full-revaluation Oracle instance
+      SubnetIds: !Ref SubnetIds
+
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow Oracle (1521) from app tier only
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 1521
+          ToPort: 1521
+          CidrIp: !Ref AllowedIngressCidr
+
+  OracleInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      Engine: oracle-se2
+      EngineVersion: "19"
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: "20"
+      StorageType: gp3
+      MasterUsername: !Ref DBMasterUsername
+      MasterUserPassword: !Ref DBMasterPassword
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DBSecurityGroup
+      PubliclyAccessible: false
+      MultiAZ: false
+      BackupRetentionPeriod: 0
+      LicenseModel: license-included
+
+Outputs:
+  DBEndpoint:
+    Value: !GetAtt OracleInstance.Endpoint.Address
+  DBPort:
+    Value: !GetAtt OracleInstance.Endpoint.Port

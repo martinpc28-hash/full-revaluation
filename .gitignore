@@ -1,0 +1,23 @@
+# Build output
+target/
+frontend/node_modules/
+frontend/dist/
+src/main/resources/static/
+
+# Local tooling downloaded during setup (JDK/Maven not needed here, but just in case)
+.tools/
+
+# Logs from local runs
+*.log
+
+# Local test data
+localtest-data/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
