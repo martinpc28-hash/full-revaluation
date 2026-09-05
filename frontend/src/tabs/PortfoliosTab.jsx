@@ -367,15 +367,19 @@ export default function PortfoliosTab({
 
       <div style={ui.card}>
         <h2 style={ui.cardTitle}>Agregar una acción</h2>
-        <p style={ui.cardSubtitle}>Revaluación lineal: valor = acciones × spot shockeado.</p>
+        <p style={ui.cardSubtitle}>
+          Revaluación lineal: valor = acciones × spot shockeado. Al correr un modelo con datos históricos reales, usa
+          el retorno diario REAL de esta acción (vía Yahoo Finance) en vez del shock genérico de S&amp;P 500 — por
+          eso el nombre debe ser el ticker real.
+        </p>
         <form onSubmit={addEquity} style={ui.form}>
           <label style={ui.label}>
-            Nombre
+            Ticker (Yahoo Finance)
             <input
               style={ui.input}
-              placeholder="ej. AAPL"
+              placeholder="ej. AAPL, MSFT, TSLA"
               value={equityForm.name}
-              onChange={(e) => setEquityForm({ ...equityForm, name: e.target.value })}
+              onChange={(e) => setEquityForm({ ...equityForm, name: e.target.value.toUpperCase() })}
             />
           </label>
           <label style={ui.label}>

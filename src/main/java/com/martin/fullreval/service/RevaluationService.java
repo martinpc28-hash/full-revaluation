@@ -7,8 +7,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,16 +35,19 @@ public class RevaluationService {
     private final InstrumentRepository instrumentRepository;
     private final MarketScenarioRepository scenarioRepository;
     private final RevaluationResultRepository resultRepository;
+    private final YahooFinanceService yahooFinanceService;
 
     private static final int BATCH_SIZE = 500;
 
     @Autowired
     public RevaluationService(InstrumentRepository instrumentRepository,
                                MarketScenarioRepository scenarioRepository,
-                               RevaluationResultRepository resultRepository) {
+                               RevaluationResultRepository resultRepository,
+                               YahooFinanceService yahooFinanceService) {
         this.instrumentRepository = instrumentRepository;
         this.scenarioRepository = scenarioRepository;
         this.resultRepository = resultRepository;
+        this.yahooFinanceService = yahooFinanceService;
     }
 
     @Transactional
@@ -55,6 +60,17 @@ public class RevaluationService {
         // Base value uses a "no shock" scenario (all shocks zero) for comparison.
         MarketScenario baseScenario = zeroShockScenario();
 
+        // Real per-ticker returns for every equity in this portfolio, fetched once
+        // up front (not per scenario) — see YahooFinanceService for why this exists:
+        // without it, every equity shares the portfolio-wide S&P 500 spot shock
+        // regardless of what the position actually is. Bonds/options are unaffected.
+        Map<String, Map<LocalDate, BigDecimal>> equityReturnsByTicker = new HashMap<>();
+        for (Instrument instrument : instruments) {
+            if (instrument instanceof Equity equity) {
+                equityReturnsByTicker.computeIfAbsent(equity.getName(), yahooFinanceService::fetchDailyReturns);
+            }
+        }
+
         List<RevaluationResult> buffer = new ArrayList<>(BATCH_SIZE);
 
         // Parallelize the instrument x scenario grid: this is the part that's
@@ -64,9 +80,25 @@ public class RevaluationService {
         List<CompletableFuture<RevaluationResult>> futures = new ArrayList<>();
         for (Instrument instrument : instruments) {
             BigDecimal baseValue = instrument.priceInBaseCurrency(baseScenario);
+            Map<LocalDate, BigDecimal> tickerReturns =
+                    instrument instanceof Equity e ? equityReturnsByTicker.get(e.getName()) : null;
+
             for (MarketScenario scenario : scenarios) {
+                // If we have a REAL return for this equity on this exact date, use it
+                // instead of the scenario's shared spot shock. Falls back silently
+                // (null lookup) for bonds, options, unknown tickers, or synthetic/
+                // stress scenarios whose dates don't correspond to real trading days.
+                MarketScenario effectiveScenario = scenario;
+                if (tickerReturns != null) {
+                    BigDecimal realReturn = tickerReturns.get(scenario.getScenarioDate());
+                    if (realReturn != null) {
+                        effectiveScenario = withSpotOverride(scenario, realReturn);
+                    }
+                }
+                final MarketScenario scenarioForPricing = effectiveScenario;
+
                 futures.add(CompletableFuture.supplyAsync(() -> {
-                    BigDecimal revalued = instrument.priceInBaseCurrency(scenario);
+                    BigDecimal revalued = instrument.priceInBaseCurrency(scenarioForPricing);
                     RevaluationResult result = new RevaluationResult();
                     result.setRunId(runId);
                     result.setInstrumentId(instrument.getId());
@@ -115,6 +147,20 @@ public class RevaluationService {
 
         // VaR is reported as a positive loss number.
         return losses.get(index).negate().max(BigDecimal.ZERO);
+    }
+
+    /** A copy of `base` with its spot shock replaced — used to splice in a real
+     * per-ticker return for one equity without mutating the shared, persisted
+     * scenario (which every other instrument in the run still needs unchanged). */
+    private MarketScenario withSpotOverride(MarketScenario base, BigDecimal spotShockOverride) {
+        MarketScenario copy = new MarketScenario();
+        copy.setScenarioSetId(base.getScenarioSetId());
+        copy.setScenarioDate(base.getScenarioDate());
+        copy.setRateShockBp(base.getRateShockBp());
+        copy.setSpotShockPct(spotShockOverride);
+        copy.setVolShockAbs(base.getVolShockAbs());
+        copy.setFxShockPct(base.getFxShockPct());
+        return copy;
     }
 
     private MarketScenario zeroShockScenario() {
