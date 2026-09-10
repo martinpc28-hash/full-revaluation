@@ -375,15 +375,31 @@ function RankingHeatmaps({ panel, tickers, yearFrom, yearTo }) {
   for (let y = yearFrom; y <= yearTo; y++) years.push(y);
   const byKey = new Map(panel.map((p) => [`${p.ticker}-${p.year}`, p]));
 
-  function buildCells(field) {
+  // Per year, who had the best signal-window return — the "winner" the user asked to see.
+  const winnerByYear = new Map();
+  for (const y of years) {
+    let best = null;
+    for (const t of tickers) {
+      const p = byKey.get(`${t}-${y}`);
+      if (p && p.signalReturn !== null && (best === null || p.signalReturn > best.signalReturn)) {
+        best = { ticker: t, signalReturn: p.signalReturn };
+      }
+    }
+    if (best) winnerByYear.set(y, best.ticker);
+  }
+
+  function buildCells(field, { highlightWinner = false } = {}) {
     return tickers.map((t) =>
       years.map((y) => {
         const p = byKey.get(`${t}-${y}`);
         const v = p ? p[field] : null;
+        const isWinner = highlightWinner && winnerByYear.get(y) === t;
         return {
-          label: v === null || v === undefined ? "" : `${(v * 100).toFixed(0)}%`,
+          label: v === null || v === undefined ? "" : `${isWinner ? "🏆" : ""}${(v * 100).toFixed(0)}%`,
           color: v === null || v === undefined ? "#f3f4f6" : divergingColor(v, 0.4),
-          title: p ? `${t} ${y}: ${(v * 100).toFixed(1)}%` : "sin datos",
+          title: p
+            ? `${t} ${y}: ${(v * 100).toFixed(1)}%${isWinner ? " — ganador de la ventana de señal ese año" : ""}`
+            : "sin datos",
         };
       })
     );
@@ -391,6 +407,20 @@ function RankingHeatmaps({ panel, tickers, yearFrom, yearTo }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div>
+        <h4 style={{ margin: "0 0 8px 0", fontSize: 14 }}>
+          Retorno — ventana de señal <span style={{ fontWeight: 400, color: colors.textMuted }}>(🏆 = ganador del año)</span>
+        </h4>
+        <div style={ui.tableScroll}>
+          <HeatmapGrid
+            rowLabels={tickers}
+            colLabels={years}
+            cells={buildCells("signalReturn", { highlightWinner: true })}
+            cellWidth={48}
+            rowLabelWidth={70}
+          />
+        </div>
+      </div>
       <div>
         <h4 style={{ margin: "0 0 8px 0", fontSize: 14 }}>Retorno — resto del año</h4>
         <div style={ui.tableScroll}>
