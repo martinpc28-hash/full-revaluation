@@ -499,13 +499,26 @@ function TestResults({ result }) {
         <h3 style={ui.cardTitle}>Rendimiento de la estrategia</h3>
         <p style={ui.cardSubtitle}>
           Cartera equiponderada del cuartil superior por señal, comprada al terminar la ventana de señal y mantenida
-          hasta fin de año, contra el universo equiponderado completo en el mismo período (evita look-ahead bias).
+          hasta fin de año, contra el universo equiponderado completo en el mismo período (evita look-ahead bias). S&amp;P
+          500 (SPY) y MSCI World (URTH) se agregan como referencia fija, con la misma metodología — siempre en USD, sin
+          importar la divisa del test.
+          {!strategy.sp500Available || !strategy.msciWorldAvailable ? (
+            <>
+              {" "}
+              {!strategy.sp500Available && "S&P 500 no se muestra"}
+              {!strategy.sp500Available && !strategy.msciWorldAvailable && " y "}
+              {!strategy.msciWorldAvailable && "MSCI World (URTH, cotiza desde 2012) no se muestra"} porque no tiene
+              datos para todo el rango de años pedido.
+            </>
+          ) : null}
         </p>
         <LineChart
           points={strategy.cumulative}
           series={[
             { key: "cumulativeStrategy", label: "Cuartil superior", color: colors.primary },
             { key: "cumulativeBenchmark", label: "Universo", color: colors.textMuted },
+            ...(strategy.sp500Available ? [{ key: "cumulativeSp500", label: "S&P 500", color: colors.warning }] : []),
+            ...(strategy.msciWorldAvailable ? [{ key: "cumulativeMsciWorld", label: "MSCI World", color: "#9333ea" }] : []),
           ]}
         />
         <div style={{ ...ui.tableScroll, marginTop: 12 }}>

@@ -108,8 +108,28 @@ public class SeasonalityService {
         result.put("correlationVsFullYear", correlationBlock(statsPoints, Point::signal, Point::fullYear, true));
         result.put("persistenceVsRest", quartilePersistence(statsPoints, Point::rest));
         result.put("persistenceVsFullYear", quartilePersistence(statsPoints, Point::fullYear));
-        result.put("strategy", strategyBacktest(statsPoints));
+
+        // Fixed reference lines for the strategy chart — always USD, same source, same
+        // signal/hold-period methodology as the strategy itself, regardless of what the
+        // user picked for their own universe/currency (comparing against "the market" and
+        // "the world" only makes sense in one consistent currency).
+        Map<Integer, Double> sp500Rest = restReturnSeries(source, "SPY", req.yearFrom, req.yearTo, req.signalStartMonth, req.signalLengthMonths);
+        Map<Integer, Double> msciWorldRest = restReturnSeries(source, "URTH", req.yearFrom, req.yearTo, req.signalStartMonth, req.signalLengthMonths);
+        result.put("strategy", strategyBacktest(statsPoints, sp500Rest, msciWorldRest));
         return result;
+    }
+
+    /** Rest-of-year return for one fixed benchmark ticker, by year — used only for the
+     * strategy chart's SPY/URTH reference lines, always fetched in USD. */
+    private Map<Integer, Double> restReturnSeries(MarketDataSource source, String ticker, int yearFrom, int yearTo,
+                                                    int startMonth, int lengthMonths) {
+        NavigableMap<LocalDate, BigDecimal> closes = source.fetchDailyCloses(ticker);
+        Map<Integer, Double> series = new LinkedHashMap<>();
+        for (int year = yearFrom; year <= yearTo; year++) {
+            Point p = computePoint(ticker, year, closes, startMonth, lengthMonths);
+            if (p.rest() != null) series.put(year, p.rest());
+        }
+        return series;
     }
 
     // ------------------------------------------------------------------
@@ -363,7 +383,7 @@ public class SeasonalityService {
     /** Equal-weight top-quartile-by-signal portfolio, held for the REST of the year (buying at the end of the
      * signal window, since that's the earliest point the signal is actually known — using the full-year return
      * here would be look-ahead bias), vs. the equal-weighted full universe over the same holding period. */
-    private Map<String, Object> strategyBacktest(List<Point> points) {
+    private Map<String, Object> strategyBacktest(List<Point> points, Map<Integer, Double> sp500Rest, Map<Integer, Double> msciWorldRest) {
         Map<Integer, List<Point>> byYear = points.stream()
                 .filter(p -> p.rest() != null)
                 .collect(Collectors.groupingBy(Point::year));
@@ -390,19 +410,37 @@ public class SeasonalityService {
             perYear.add(row);
         }
         perYear.sort(Comparator.comparing(m -> (Integer) m.get("year")));
+        List<Integer> years = perYear.stream().map(m -> (Integer) m.get("year")).toList();
+
+        // A benchmark that doesn't cover the WHOLE requested range (e.g. URTH only started
+        // trading in 2012) is dropped entirely rather than shown as a flat 0% line for the
+        // years before it existed — that would misleadingly read as "no return", not "no data".
+        boolean includeSp500 = years.stream().allMatch(sp500Rest::containsKey);
+        boolean includeMsciWorld = years.stream().allMatch(msciWorldRest::containsKey);
 
         List<Map<String, Object>> cumulative = new ArrayList<>();
-        double cumStrategy = 1.0, cumBenchmark = 1.0;
+        double cumStrategy = 1.0, cumBenchmark = 1.0, cumSp500 = 1.0, cumMsciWorld = 1.0;
         for (Map<String, Object> row : perYear) {
+            int year = (Integer) row.get("year");
             cumStrategy *= 1.0 + (double) row.get("strategyReturn");
             cumBenchmark *= 1.0 + (double) row.get("benchmarkReturn");
+            if (includeSp500) cumSp500 *= 1.0 + sp500Rest.get(year);
+            if (includeMsciWorld) cumMsciWorld *= 1.0 + msciWorldRest.get(year);
+
             Map<String, Object> point = new LinkedHashMap<>();
-            point.put("year", row.get("year"));
+            point.put("year", year);
             point.put("cumulativeStrategy", cumStrategy - 1.0);
             point.put("cumulativeBenchmark", cumBenchmark - 1.0);
+            if (includeSp500) point.put("cumulativeSp500", cumSp500 - 1.0);
+            if (includeMsciWorld) point.put("cumulativeMsciWorld", cumMsciWorld - 1.0);
             cumulative.add(point);
         }
 
-        return Map.of("perYear", perYear, "cumulative", cumulative);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("perYear", perYear);
+        result.put("cumulative", cumulative);
+        result.put("sp500Available", includeSp500);
+        result.put("msciWorldAvailable", includeMsciWorld);
+        return result;
     }
 }
