@@ -44,4 +44,10 @@ export const api = {
   getVar: (runId, confidence) => request(`/api/revaluation/${runId}/var?confidence=${confidence}`),
   getPnlDistribution: (runId) => request(`/api/revaluation/${runId}/pnl-distribution`),
   getInstrumentBreakdown: (runId) => request(`/api/revaluation/${runId}/instrument-breakdown`),
+
+  // Seasonality Hypothesis Lab
+  getSeasonalityUniverse: () => request(`/api/seasonality/universe`),
+  getSeasonalitySources: () => request(`/api/seasonality/sources`),
+  runSeasonalityTest: (body) => request(`/api/seasonality/test`, postJson(body)),
+  runSeasonalitySweep: (body) => request(`/api/seasonality/sweep`, postJson(body)),
 };

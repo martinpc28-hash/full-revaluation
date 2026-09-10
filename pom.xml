@@ -61,6 +61,14 @@
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- Spearman rank correlation for the seasonality module — no reason to
+             hand-roll rank correlation when this is the standard, well-tested
+             implementation. -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-math3</artifactId>
+            <version>3.6.1</version>
+        </dependency>
     </dependencies>
 
     <build>

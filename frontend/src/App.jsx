@@ -4,6 +4,7 @@ import { shell, ui } from "./theme.js";
 import DashboardTab from "./tabs/DashboardTab.jsx";
 import PortfoliosTab from "./tabs/PortfoliosTab.jsx";
 import ScenariosTab from "./tabs/ScenariosTab.jsx";
+import SeasonalityTab from "./tabs/SeasonalityTab.jsx";
 
 const PORTFOLIOS_KEY = "fullreval.portfolios";
 const CURRENT_KEY = "fullreval.currentPortfolioId";
@@ -33,6 +34,7 @@ const TABS = [
   { key: "dashboard", label: "Gráficos y métricas", icon: "📊" },
   { key: "portfolios", label: "Carteras", icon: "💼" },
   { key: "scenarios", label: "Escenarios de estrés", icon: "⚙️" },
+  { key: "seasonality", label: "Estacionalidad", icon: "🔬" },
 ];
 
 export default function App() {
@@ -163,6 +165,8 @@ export default function App() {
         {activeTab === "scenarios" && (
           <ScenariosTab portfolioId={currentPortfolioId} setStatus={setStatus} onRunComplete={onRunComplete} />
         )}
+
+        {activeTab === "seasonality" && <SeasonalityTab setStatus={setStatus} />}
       </main>
     </div>
   );

@@ -17,23 +17,26 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.Collections;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Real per-ticker historical stock data, straight from Yahoo Finance's public
  * chart API (the same endpoint the Python `yfinance` package calls under the
- * hood — no official SDK, no API key). Used to give each Equity instrument its
- * OWN real day-over-day return series, instead of sharing the portfolio-wide
- * S&P 500 spot shock (from HistoricalScenarioService/FRED) with every equity
- * regardless of what it actually is. Bonds and options still use the shared
- * FRED-based factors — this only narrows the "one shock fits all" gap for
- * equities, it doesn't remove it for the rest of the engine.
+ * hood — no official SDK, no API key). Two consumers:
+ *   - RevaluationService: gives each Equity instrument its OWN real
+ *     day-over-day return series, instead of sharing the portfolio-wide
+ *     S&P 500 spot shock with every equity regardless of what it actually is.
+ *   - SeasonalityService: needs actual price LEVELS (not just day-over-day
+ *     returns) to compute cumulative returns over arbitrary windows, up to
+ *     ~20 years back.
  *
- * Equity.getName() doubles as the Yahoo ticker (e.g. "AAPL", "MSFT") — enter
- * a real ticker there, not a free-text label, or this silently finds nothing
- * and the engine falls back to the shared spot shock for that position.
+ * A ticker's full available price history is fetched once (range=max) and
+ * cached, rather than re-fetched per date range — the seasonality sweep alone
+ * asks for the same ticker under 36 different windows in one request.
  */
 @Service
 public class YahooFinanceService {
@@ -49,8 +52,8 @@ public class YahooFinanceService {
 
     public YahooFinanceService() {
         // Forced HTTP/1.1 defensively: FRED's CDN (Akamai) silently hangs Java's
-        // default HTTP/2 client (see HistoricalScenarioService); Yahoo sits behind
-        // similar infra, so avoid the same class of bug pre-emptively.
+        // default HTTP/2 client (see FredClient); Yahoo sits behind similar
+        // infra, so avoid the same class of bug pre-emptively.
         this.httpClient = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(TIMEOUT)
@@ -58,32 +61,57 @@ public class YahooFinanceService {
     }
 
     /**
-     * Day-over-day return series for a ticker, keyed by trading date, covering
-     * roughly the last year. Returns an empty map (never null, never throws) if
-     * the ticker is invalid or Yahoo can't be reached — callers should treat
-     * "no data" as "fall back to the shared shock", not as an error.
+     * Full available daily close-price history for a ticker (as far back as
+     * Yahoo has it), keyed by trading date. Returns an empty map (never null,
+     * never throws) if the ticker is invalid or Yahoo can't be reached —
+     * callers should treat "no data" as "nothing available", not as a crash.
      */
-    public Map<LocalDate, BigDecimal> fetchDailyReturns(String ticker) {
+    public NavigableMap<LocalDate, BigDecimal> fetchDailyCloses(String ticker) {
         String key = ticker.trim().toUpperCase();
         CacheEntry cached = cache.get(key);
         if (cached != null && cached.fetchedAt.plus(CACHE_TTL).isAfter(Instant.now())) {
-            return cached.returns;
+            return cached.closes;
         }
 
-        Map<LocalDate, BigDecimal> returns;
+        NavigableMap<LocalDate, BigDecimal> closes;
         try {
-            returns = fetchFromYahoo(key);
+            closes = fetchFromYahoo(key);
         } catch (Exception e) {
             log.warn("Could not fetch Yahoo Finance data for ticker '{}': {}", key, e.getMessage());
-            returns = Map.of();
+            closes = Collections.emptyNavigableMap();
         }
-        cache.put(key, new CacheEntry(returns, Instant.now()));
+        cache.put(key, new CacheEntry(closes, Instant.now()));
+        return closes;
+    }
+
+    /**
+     * Day-over-day return series for a ticker, derived from fetchDailyCloses.
+     * Used by RevaluationService to override the shared spot shock for equities.
+     */
+    public Map<LocalDate, BigDecimal> fetchDailyReturns(String ticker) {
+        NavigableMap<LocalDate, BigDecimal> closes = fetchDailyCloses(ticker);
+        Map<LocalDate, BigDecimal> returns = new TreeMap<>();
+        LocalDate[] dates = closes.keySet().toArray(new LocalDate[0]);
+        for (int i = 1; i < dates.length; i++) {
+            BigDecimal prev = closes.get(dates[i - 1]);
+            BigDecimal today = closes.get(dates[i]);
+            returns.put(dates[i], today.subtract(prev).divide(prev, MathContext.DECIMAL64));
+        }
         return returns;
     }
 
-    private Map<LocalDate, BigDecimal> fetchFromYahoo(String ticker) throws IOException, InterruptedException {
+    private NavigableMap<LocalDate, BigDecimal> fetchFromYahoo(String ticker) throws IOException, InterruptedException {
+        // Explicit period1/period2 instead of range=max: Yahoo silently DOWNSAMPLES
+        // range=max to ~monthly bars for the older portion of the series even when
+        // interval=1d is requested (confirmed empirically — range=max gave ~330
+        // points over 27 years for XLK, i.e. ~monthly, while an explicit 20-26 year
+        // period1/period2 window gives the full ~252 trading days/year). period1
+        // fixed at 2000-01-01 covers the seasonality module's "up to ~20 years" need
+        // with margin; period2 is "now".
+        long period1 = java.time.LocalDate.of(2000, 1, 1).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+        long period2 = Instant.now().getEpochSecond();
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(CHART_URL + ticker + "?range=1y&interval=1d"))
+                .uri(URI.create(CHART_URL + ticker + "?period1=" + period1 + "&period2=" + period2 + "&interval=1d"))
                 .timeout(TIMEOUT)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36")
                 .GET()
@@ -112,16 +140,8 @@ public class YahooFinanceService {
             LocalDate date = Instant.ofEpochSecond(timestamps.get(i).asLong()).atZone(ZoneOffset.UTC).toLocalDate();
             closesByDate.put(date, BigDecimal.valueOf(closeNode.asDouble()));
         }
-
-        Map<LocalDate, BigDecimal> returns = new TreeMap<>();
-        LocalDate[] dates = closesByDate.keySet().toArray(new LocalDate[0]);
-        for (int i = 1; i < dates.length; i++) {
-            BigDecimal prev = closesByDate.get(dates[i - 1]);
-            BigDecimal today = closesByDate.get(dates[i]);
-            returns.put(dates[i], today.subtract(prev).divide(prev, MathContext.DECIMAL64));
-        }
-        return returns;
+        return closesByDate;
     }
 
-    private record CacheEntry(Map<LocalDate, BigDecimal> returns, Instant fetchedAt) {}
+    private record CacheEntry(NavigableMap<LocalDate, BigDecimal> closes, Instant fetchedAt) {}
 }

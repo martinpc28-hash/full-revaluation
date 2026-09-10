@@ -4,28 +4,20 @@ import com.martin.fullreval.model.MarketScenario;
 import com.martin.fullreval.repository.MarketScenarioRepository;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.MathContext;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 
 /**
  * Builds a market scenario set from REAL historical daily market data instead
  * of synthetic random noise (see ScenarioController#generateScenarioSet).
  *
  * Source: FRED (Federal Reserve Economic Data), the Fed's free public
- * data API. No API key or account needed — the graph/fredgraph.csv endpoint
- * serves plain CSV. Four series cover the four risk factors this engine
- * already models:
+ * data API — via FredClient. Four series cover the four risk factors this
+ * engine already models:
  *   - DGS10   10-Year Treasury yield        -> rate shock (bp)
  *   - SP500   S&P 500 index level           -> equity spot shock (%)
  *   - VIXCLS  CBOE Volatility Index         -> vol shock (points)
@@ -41,27 +33,19 @@ import java.util.TreeMap;
 @Service
 public class HistoricalScenarioService {
 
-    private static final String FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=";
-    private static final Duration TIMEOUT = Duration.ofSeconds(15);
-
     private final MarketScenarioRepository scenarioRepository;
-    private final HttpClient httpClient;
+    private final FredClient fredClient;
 
-    public HistoricalScenarioService(MarketScenarioRepository scenarioRepository) {
+    public HistoricalScenarioService(MarketScenarioRepository scenarioRepository, FredClient fredClient) {
         this.scenarioRepository = scenarioRepository;
-        // HTTP/1.1 forced: the JDK's HTTP/2 client occasionally gets RST_STREAM
-        // "internal error" against FRED's server for reasons unrelated to this app.
-        this.httpClient = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_1_1)
-                .connectTimeout(TIMEOUT)
-                .build();
+        this.fredClient = fredClient;
     }
 
     public List<MarketScenario> buildHistoricalScenarioSet(String scenarioSetId, int count) {
-        Map<LocalDate, BigDecimal> rates = fetchSeries("DGS10");
-        Map<LocalDate, BigDecimal> spot = fetchSeries("SP500");
-        Map<LocalDate, BigDecimal> vol = fetchSeries("VIXCLS");
-        Map<LocalDate, BigDecimal> fx = fetchSeries("DEXUSEU");
+        Map<LocalDate, BigDecimal> rates = fredClient.fetchSeries("DGS10");
+        Map<LocalDate, BigDecimal> spot = fredClient.fetchSeries("SP500");
+        Map<LocalDate, BigDecimal> vol = fredClient.fetchSeries("VIXCLS");
+        Map<LocalDate, BigDecimal> fx = fredClient.fetchSeries("DEXUSEU");
 
         // Only keep dates where all four series actually published a value —
         // different series can have different holiday calendars/release gaps.
@@ -108,51 +92,5 @@ public class HistoricalScenarioService {
 
     private BigDecimal pctChange(BigDecimal from, BigDecimal to) {
         return to.subtract(from).divide(from, MathContext.DECIMAL64);
-    }
-
-    private Map<LocalDate, BigDecimal> fetchSeries(String seriesId) {
-        // Akamai (FRED's CDN) silently black-holes this request (hangs until
-        // timeout, no RST/error) with a browser-claiming User-Agent — almost
-        // certainly a bot-detection mismatch between a JDK TLS fingerprint and a
-        // "Chrome" UA string. Claiming to be curl instead (still HTTP/1.1, forced
-        // in the constructor above) is what actually gets a real response.
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(FRED_CSV_URL + seriesId))
-                .timeout(TIMEOUT)
-                .header("User-Agent", "curl/8.5.0")
-                .GET()
-                .build();
-
-        HttpResponse<String> response;
-        try {
-            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        } catch (IOException | InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Could not reach FRED for series " + seriesId + ": " + e.getMessage(), e);
-        }
-        if (response.statusCode() != 200) {
-            throw new IllegalStateException("FRED returned HTTP " + response.statusCode() + " for series " + seriesId);
-        }
-
-        Map<LocalDate, BigDecimal> series = new TreeMap<>();
-        String[] lines = response.body().split("\n");
-        for (int i = 1; i < lines.length; i++) { // line 0 is the header
-            String line = lines[i].trim();
-            if (line.isEmpty()) continue;
-            int comma = line.indexOf(',');
-            if (comma < 0) continue;
-            String dateStr = line.substring(0, comma);
-            String valueStr = line.substring(comma + 1).trim();
-            if (valueStr.isEmpty() || valueStr.equals(".")) continue; // FRED's "no data published" marker
-            try {
-                series.put(LocalDate.parse(dateStr), new BigDecimal(valueStr));
-            } catch (RuntimeException ignored) {
-                // Skip any malformed row rather than failing the whole fetch.
-            }
-        }
-        if (series.isEmpty()) {
-            throw new IllegalStateException("FRED series " + seriesId + " returned no usable data");
-        }
-        return series;
     }
 }

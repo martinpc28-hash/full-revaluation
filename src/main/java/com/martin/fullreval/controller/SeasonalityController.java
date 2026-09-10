@@ -1,0 +1,56 @@
+package com.martin.fullreval.controller;
+
+import com.martin.fullreval.dto.SeasonalitySweepRequest;
+import com.martin.fullreval.dto.SeasonalityTestRequest;
+import com.martin.fullreval.service.AssetUniverseService;
+import com.martin.fullreval.service.SeasonalityService;
+import com.martin.fullreval.service.marketdata.MarketDataSourceRegistry;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/seasonality")
+public class SeasonalityController {
+
+    private final SeasonalityService seasonalityService;
+    private final AssetUniverseService assetUniverseService;
+    private final MarketDataSourceRegistry sourceRegistry;
+
+    public SeasonalityController(SeasonalityService seasonalityService, AssetUniverseService assetUniverseService,
+                                  MarketDataSourceRegistry sourceRegistry) {
+        this.seasonalityService = seasonalityService;
+        this.assetUniverseService = assetUniverseService;
+        this.sourceRegistry = sourceRegistry;
+    }
+
+    /** Preloaded, representative asset lists (countries + sectors) for the checkbox pickers. */
+    @GetMapping("/universe")
+    public Map<String, Object> universe() {
+        return assetUniverseService.listAll();
+    }
+
+    /** Which data sources exist and which are actually usable (have an API key configured). */
+    @GetMapping("/sources")
+    public Object sources() {
+        return sourceRegistry.listAll();
+    }
+
+    @PostMapping("/test")
+    public Map<String, Object> test(@RequestBody SeasonalityTestRequest req) {
+        return seasonalityService.runTest(req);
+    }
+
+    @PostMapping("/sweep")
+    public Map<String, Object> sweep(@RequestBody SeasonalitySweepRequest req) {
+        return seasonalityService.runSweep(req);
+    }
+
+    @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
+    public ResponseEntity<Map<String, String>> handleBadRequest(RuntimeException e) {
+        HttpStatus status = e instanceof IllegalArgumentException ? HttpStatus.BAD_REQUEST : HttpStatus.BAD_GATEWAY;
+        return ResponseEntity.status(status).body(Map.of("error", e.getMessage()));
+    }
+}
