@@ -527,7 +527,7 @@ function TestResults({ result }) {
             <thead>
               <tr>
                 <th style={ui.th}>Serie</th>
-                <th style={ui.th}>Volatilidad anual</th>
+                <th style={ui.th}>Volatilidad anualizada</th>
                 <th style={ui.th}>Máximo drawdown</th>
               </tr>
             </thead>
@@ -552,8 +552,10 @@ function TestResults({ result }) {
           </table>
         </div>
         <p style={ui.muted}>
-          Volatilidad = desviación estándar de los retornos anuales (no diaria). Máximo drawdown = la mayor caída
-          desde un pico hasta un valle en la curva acumulada de cada serie.
+          Volatilidad = desviación estándar de los retornos DIARIOS reales de la cartera equiponderada durante los
+          períodos que efectivamente se mantiene cada año, anualizada (×√252) — no un promedio de retornos anuales.
+          Máximo drawdown = la mayor caída desde un pico hasta un valle en la curva acumulada de cada serie (columna
+          "Drawdown" en las tablas de abajo para ver año por año).
         </p>
 
         <div style={{ ...ui.tableScroll, marginTop: 12 }}>
@@ -564,6 +566,7 @@ function TestResults({ result }) {
                 <th style={ui.th}>Cuartil superior</th>
                 <th style={ui.th}>Universo</th>
                 <th style={ui.th}>Diferencial</th>
+                <th style={ui.th}>Drawdown (cuartil sup.)</th>
               </tr>
             </thead>
             <tbody>
@@ -575,6 +578,9 @@ function TestResults({ result }) {
                   <td style={{ ...ui.td, color: r.diff >= 0 ? colors.success : colors.danger, fontWeight: 700 }}>
                     {r.diff >= 0 ? "+" : ""}
                     {pct(r.diff)}
+                  </td>
+                  <td style={{ ...ui.td, color: r.strategyDrawdown < 0 ? colors.danger : colors.textMuted }}>
+                    {pct(r.strategyDrawdown)}
                   </td>
                 </tr>
               ))}
@@ -591,6 +597,8 @@ function TestResults({ result }) {
                   <th style={ui.th}>Cuartil superior</th>
                   <th style={ui.th}>S&amp;P 500</th>
                   <th style={ui.th}>Diferencial</th>
+                  <th style={ui.th}>Drawdown (cuartil sup.)</th>
+                  <th style={ui.th}>Drawdown (S&amp;P 500)</th>
                 </tr>
               </thead>
               <tbody>
@@ -602,6 +610,12 @@ function TestResults({ result }) {
                     <td style={{ ...ui.td, color: r.diffVsSp500 >= 0 ? colors.success : colors.danger, fontWeight: 700 }}>
                       {r.diffVsSp500 >= 0 ? "+" : ""}
                       {pct(r.diffVsSp500)}
+                    </td>
+                    <td style={{ ...ui.td, color: r.strategyDrawdown < 0 ? colors.danger : colors.textMuted }}>
+                      {pct(r.strategyDrawdown)}
+                    </td>
+                    <td style={{ ...ui.td, color: r.sp500Drawdown < 0 ? colors.danger : colors.textMuted }}>
+                      {pct(r.sp500Drawdown)}
                     </td>
                   </tr>
                 ))}
