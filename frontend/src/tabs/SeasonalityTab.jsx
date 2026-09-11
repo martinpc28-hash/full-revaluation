@@ -546,6 +546,34 @@ function TestResults({ result }) {
             </tbody>
           </table>
         </div>
+
+        {strategy.sp500Available && (
+          <div style={{ ...ui.tableScroll, marginTop: 16 }}>
+            <table style={ui.table}>
+              <thead>
+                <tr>
+                  <th style={ui.th}>Año</th>
+                  <th style={ui.th}>Cuartil superior</th>
+                  <th style={ui.th}>S&amp;P 500</th>
+                  <th style={ui.th}>Diferencial</th>
+                </tr>
+              </thead>
+              <tbody>
+                {strategy.perYear.map((r) => (
+                  <tr key={r.year}>
+                    <td style={ui.td}>{r.year}</td>
+                    <td style={ui.td}>{pct(r.strategyReturn)}</td>
+                    <td style={ui.td}>{pct(r.sp500Return)}</td>
+                    <td style={{ ...ui.td, color: r.diffVsSp500 >= 0 ? colors.success : colors.danger, fontWeight: 700 }}>
+                      {r.diffVsSp500 >= 0 ? "+" : ""}
+                      {pct(r.diffVsSp500)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

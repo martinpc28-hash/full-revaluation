@@ -418,6 +418,14 @@ public class SeasonalityService {
         boolean includeSp500 = years.stream().allMatch(sp500Rest::containsKey);
         boolean includeMsciWorld = years.stream().allMatch(msciWorldRest::containsKey);
 
+        if (includeSp500) {
+            for (Map<String, Object> row : perYear) {
+                double sp500Return = sp500Rest.get((Integer) row.get("year"));
+                row.put("sp500Return", sp500Return);
+                row.put("diffVsSp500", (double) row.get("strategyReturn") - sp500Return);
+            }
+        }
+
         List<Map<String, Object>> cumulative = new ArrayList<>();
         double cumStrategy = 1.0, cumBenchmark = 1.0, cumSp500 = 1.0, cumMsciWorld = 1.0;
         for (Map<String, Object> row : perYear) {
