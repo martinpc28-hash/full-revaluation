@@ -451,29 +451,50 @@ public class SeasonalityService {
             cumulative.add(point);
         }
 
-        // Per-year drawdown (not just the single worst-of-period number) — attached to the
-        // SAME perYear rows the two "vs. Universo" / "vs. S&P 500" tables already render, so
-        // no new table is needed on the frontend for this.
-        attachDrawdowns(perYear, cumulative, "strategyDrawdown", "cumulativeStrategy");
-        attachDrawdowns(perYear, cumulative, "benchmarkDrawdown", "cumulativeBenchmark");
-        if (includeSp500) attachDrawdowns(perYear, cumulative, "sp500Drawdown", "cumulativeSp500");
-        if (includeMsciWorld) attachDrawdowns(perYear, cumulative, "msciWorldDrawdown", "cumulativeMsciWorld");
+        // Which tickers make up each series, per year — needed to build the real daily wealth
+        // curve below (both for volatility AND for max drawdown, so a mid-year dip that fully
+        // recovers by December — invisible if you only look at year-end snapshots — actually
+        // shows up).
+        Map<Integer, List<String>> topQuartileByYear = new LinkedHashMap<>();
+        Map<Integer, List<String>> allTickersByYear = new LinkedHashMap<>();
+        for (int year : years) {
+            List<Point> yearPoints = byYear.get(year);
+            if (yearPoints == null || yearPoints.size() < 4) continue;
+            int quartileSize = (int) Math.ceil(yearPoints.size() / 4.0);
+            topQuartileByYear.put(year, yearPoints.stream()
+                    .sorted(Comparator.comparingDouble(Point::signal).reversed())
+                    .limit(quartileSize)
+                    .map(Point::ticker)
+                    .toList());
+            allTickersByYear.put(year, yearPoints.stream().map(Point::ticker).toList());
+        }
 
-        // Volatility from REAL DAILY returns of the actual held portfolio each year (equal-
-        // weighted, implicitly rebalanced daily), pooled across all years and annualized the
-        // standard way (stdev x sqrt(252)) — not the cruder stdev-of-11-yearly-numbers this
-        // used to be. Reuses the `byYear` grouping already built above for the perYear rows.
-        Map<String, Double> dailyVol = dailyVolatilityStats(byYear, closesByTicker, spyCloses, urthCloses,
-                startMonth, lengthMonths, includeSp500, includeMsciWorld);
+        DailySeries strategyDaily = buildDailySeries(years, topQuartileByYear::get, closesByTicker, startMonth, lengthMonths);
+        DailySeries benchmarkDaily = buildDailySeries(years, allTickersByYear::get, closesByTicker, startMonth, lengthMonths);
+        DailySeries sp500Daily = includeSp500
+                ? buildDailySeries(years, y -> List.of("SPY"), Map.of("SPY", spyCloses), startMonth, lengthMonths) : null;
+        DailySeries msciDaily = includeMsciWorld
+                ? buildDailySeries(years, y -> List.of("URTH"), Map.of("URTH", urthCloses), startMonth, lengthMonths) : null;
+
+        // Per-year max drawdown (running, as of that year-end, but built from real daily
+        // closes within each year — not just its closing snapshot) — attached to the SAME
+        // perYear rows the two "vs. Universo" / "vs. S&P 500" tables already render.
+        for (int i = 0; i < perYear.size(); i++) {
+            int year = years.get(i);
+            perYear.get(i).put("strategyDrawdown", strategyDaily.maxDrawdownByYear().getOrDefault(year, 0.0));
+            perYear.get(i).put("benchmarkDrawdown", benchmarkDaily.maxDrawdownByYear().getOrDefault(year, 0.0));
+            if (includeSp500) perYear.get(i).put("sp500Drawdown", sp500Daily.maxDrawdownByYear().getOrDefault(year, 0.0));
+            if (includeMsciWorld) perYear.get(i).put("msciWorldDrawdown", msciDaily.maxDrawdownByYear().getOrDefault(year, 0.0));
+        }
 
         Map<String, Object> stats = new LinkedHashMap<>();
-        stats.put("strategy", seriesStats(dailyVol.get("strategy"), wealthIndex(cumulative, "cumulativeStrategy")));
-        stats.put("benchmark", seriesStats(dailyVol.get("benchmark"), wealthIndex(cumulative, "cumulativeBenchmark")));
+        stats.put("strategy", Map.of("volatility", strategyDaily.volatility(), "maxDrawdown", strategyDaily.maxDrawdown()));
+        stats.put("benchmark", Map.of("volatility", benchmarkDaily.volatility(), "maxDrawdown", benchmarkDaily.maxDrawdown()));
         if (includeSp500) {
-            stats.put("sp500", seriesStats(dailyVol.get("sp500"), wealthIndex(cumulative, "cumulativeSp500")));
+            stats.put("sp500", Map.of("volatility", sp500Daily.volatility(), "maxDrawdown", sp500Daily.maxDrawdown()));
         }
         if (includeMsciWorld) {
-            stats.put("msciWorld", seriesStats(dailyVol.get("msciWorld"), wealthIndex(cumulative, "cumulativeMsciWorld")));
+            stats.put("msciWorld", Map.of("volatility", msciDaily.volatility(), "maxDrawdown", msciDaily.maxDrawdown()));
         }
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -485,107 +506,54 @@ public class SeasonalityService {
         return result;
     }
 
-    /** Wealth index (starting at 1.0) rebuilt from a cumulative-return series, for drawdown math. */
-    private List<Double> wealthIndex(List<Map<String, Object>> cumulative, String key) {
-        List<Double> wealth = new ArrayList<>();
-        wealth.add(1.0);
-        for (Map<String, Object> row : cumulative) {
-            wealth.add((Double) row.get(key) + 1.0);
-        }
-        return wealth;
-    }
-
-    private List<Double> drawdownSeries(List<Double> wealth) {
-        List<Double> dd = new ArrayList<>();
-        double peak = wealth.isEmpty() ? 1.0 : wealth.get(0);
-        for (double w : wealth) {
-            peak = Math.max(peak, w);
-            dd.add((w - peak) / peak);
-        }
-        return dd;
-    }
-
-    /** Writes `outField` into each perYear row = the drawdown at that row's year-end, for the
-     * series stored under `cumulativeKey`. wealthIndex/drawdownSeries are 1 longer than
-     * perYear (they include the t=0 baseline), hence the i+1 offset. */
-    private void attachDrawdowns(List<Map<String, Object>> perYear, List<Map<String, Object>> cumulative,
-                                  String outField, String cumulativeKey) {
-        List<Double> drawdowns = drawdownSeries(wealthIndex(cumulative, cumulativeKey));
-        for (int i = 0; i < perYear.size(); i++) {
-            perYear.get(i).put(outField, drawdowns.get(i + 1));
-        }
-    }
-
-    /** Volatility (annualized, stdev x sqrt(252)) and max drawdown for one series. `dailyVolatility`
-     * comes in pre-computed (see dailyVolatilityStats) since it needs daily price data this
-     * method doesn't have access to; drawdown is computed here from the year-end wealth index. */
-    private Map<String, Object> seriesStats(Double dailyVolatility, List<Double> wealth) {
-        double maxDrawdown = drawdownSeries(wealth).stream().mapToDouble(Double::doubleValue).min().orElse(0);
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("volatility", dailyVolatility);
-        m.put("maxDrawdown", maxDrawdown);
-        return m;
-    }
+    /** volatility: annualized stdev of the chronological daily-return series. maxDrawdown: worst
+     * peak-to-trough over the SAME continuous daily wealth curve (built once, used for both —
+     * see buildDailySeries). maxDrawdownByYear: that curve's running drawdown as of each
+     * year-end, i.e. what the per-year table columns show. */
+    private record DailySeries(double volatility, double maxDrawdown, Map<Integer, Double> maxDrawdownByYear) {}
 
     /**
-     * Real daily returns of the actually-held equal-weighted portfolio each year (top quartile
-     * for "strategy", the whole covered universe for "benchmark", SPY/URTH for the fixed
-     * lines), restricted to that year's holding period (day after the signal window ends,
-     * through Dec 31), pooled across every year, then annualized. A day's portfolio return is
+     * Builds ONE continuous, chronologically-ordered daily wealth curve for a series (top
+     * quartile for "strategy", the whole covered universe for "benchmark", SPY/URTH for the
+     * fixed lines) across every year, compounding real daily returns during each year's
+     * holding period (day after the signal window ends, through Dec 31). Between one year's
+     * holding period and the next year's, wealth is held FLAT — the strategy isn't invested
+     * during the signal window itself (that's the whole point of "buy at the end of it, not
+     * before"), so there's nothing for it to gain or lose there. A day's portfolio return is
      * the simple average of its constituents' own daily returns (equal weight, rebalanced
-     * daily — the standard simplifying assumption for this kind of backtest stat).
+     * daily). Computing volatility and drawdown off this ONE ordered series (instead of a
+     * year-end-only snapshot) is what lets a mid-year dip that fully recovers by December
+     * actually show up as a drawdown.
      */
-    private Map<String, Double> dailyVolatilityStats(Map<Integer, List<Point>> byYear,
-                                                       Map<String, NavigableMap<LocalDate, BigDecimal>> closesByTicker,
-                                                       NavigableMap<LocalDate, BigDecimal> spyCloses,
-                                                       NavigableMap<LocalDate, BigDecimal> urthCloses,
-                                                       int startMonth, int lengthMonths,
-                                                       boolean includeSp500, boolean includeMsciWorld) {
-        List<Double> strategyDaily = new ArrayList<>();
-        List<Double> benchmarkDaily = new ArrayList<>();
-        List<Double> sp500Daily = new ArrayList<>();
-        List<Double> msciDaily = new ArrayList<>();
+    private DailySeries buildDailySeries(List<Integer> years, java.util.function.Function<Integer, List<String>> basketForYear,
+                                          Map<String, NavigableMap<LocalDate, BigDecimal>> closesByTicker,
+                                          int startMonth, int lengthMonths) {
+        List<Double> allDailyReturns = new ArrayList<>();
+        double wealth = 1.0;
+        double peak = 1.0;
+        double maxDrawdown = 0.0;
+        Map<Integer, Double> maxDrawdownByYear = new LinkedHashMap<>();
 
-        for (Map.Entry<Integer, List<Point>> e : byYear.entrySet()) {
-            int year = e.getKey();
-            List<Point> yearPoints = e.getValue();
-            if (yearPoints.size() < 4) continue;
-            int quartileSize = (int) Math.ceil(yearPoints.size() / 4.0);
-
-            List<String> topQuartileTickers = yearPoints.stream()
-                    .sorted(Comparator.comparingDouble(Point::signal).reversed())
-                    .limit(quartileSize)
-                    .map(Point::ticker)
-                    .toList();
-            List<String> allTickers = yearPoints.stream().map(Point::ticker).toList();
-
+        for (int year : years) {
+            List<String> basket = basketForYear.apply(year);
             LocalDate windowStart = LocalDate.of(year, startMonth, 1);
             LocalDate windowEnd = windowStart.plusMonths(lengthMonths).minusDays(1);
             LocalDate holdStart = windowEnd.plusDays(1);
             LocalDate holdEnd = LocalDate.of(year, 12, 31);
-            if (!holdStart.isBefore(holdEnd)) continue;
 
-            strategyDaily.addAll(portfolioDailyReturns(topQuartileTickers, closesByTicker, holdStart, holdEnd));
-            benchmarkDaily.addAll(portfolioDailyReturns(allTickers, closesByTicker, holdStart, holdEnd));
-            if (includeSp500) {
-                strategyDailyHelper(sp500Daily, "SPY", spyCloses, holdStart, holdEnd);
+            if (basket != null && !basket.isEmpty() && holdStart.isBefore(holdEnd)) {
+                List<Double> dailyReturns = portfolioDailyReturns(basket, closesByTicker, holdStart, holdEnd);
+                allDailyReturns.addAll(dailyReturns);
+                for (double r : dailyReturns) {
+                    wealth *= 1.0 + r;
+                    peak = Math.max(peak, wealth);
+                    maxDrawdown = Math.min(maxDrawdown, (wealth - peak) / peak);
+                }
             }
-            if (includeMsciWorld) {
-                strategyDailyHelper(msciDaily, "URTH", urthCloses, holdStart, holdEnd);
-            }
+            maxDrawdownByYear.put(year, maxDrawdown); // snapshot as of this year-end either way
         }
 
-        Map<String, Double> result = new LinkedHashMap<>();
-        result.put("strategy", annualizedVolFromDaily(strategyDaily));
-        result.put("benchmark", annualizedVolFromDaily(benchmarkDaily));
-        if (includeSp500) result.put("sp500", annualizedVolFromDaily(sp500Daily));
-        if (includeMsciWorld) result.put("msciWorld", annualizedVolFromDaily(msciDaily));
-        return result;
-    }
-
-    private void strategyDailyHelper(List<Double> sink, String ticker, NavigableMap<LocalDate, BigDecimal> closes,
-                                      LocalDate holdStart, LocalDate holdEnd) {
-        sink.addAll(portfolioDailyReturns(List.of(ticker), Map.of(ticker, closes), holdStart, holdEnd));
+        return new DailySeries(annualizedVolFromDaily(allDailyReturns), maxDrawdown, maxDrawdownByYear);
     }
 
     /** Equal-weighted daily portfolio returns over [from, to], using the first ticker's trading
