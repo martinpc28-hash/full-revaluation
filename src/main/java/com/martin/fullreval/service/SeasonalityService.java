@@ -384,7 +384,10 @@ public class SeasonalityService {
 
         for (Map.Entry<Integer, List<Point>> e : byYear.entrySet()) {
             List<Point> yearPoints = e.getValue();
-            if (yearPoints.size() < 4) continue; // need at least 4 for a quartile to mean anything
+            // Need at least 2 to split a "top" from a "bottom" at all — with exactly 2 assets
+            // this degenerates to "which of the two led", which is still a valid comparison,
+            // just not a literal quartile (quartileSize below is 1 of 2, i.e. the top half).
+            if (yearPoints.size() < 2) continue;
             int quartileSize = (int) Math.ceil(yearPoints.size() / 4.0);
 
             Set<String> topBySignal = yearPoints.stream()
@@ -434,7 +437,7 @@ public class SeasonalityService {
         List<Map<String, Object>> perYear = new ArrayList<>();
         for (Map.Entry<Integer, List<Point>> e : byYear.entrySet()) {
             List<Point> yearPoints = e.getValue();
-            if (yearPoints.size() < 4) continue;
+            if (yearPoints.size() < 2) continue; // need at least 2 to have a "top" and a "rest"
             int quartileSize = (int) Math.ceil(yearPoints.size() / 4.0);
 
             List<Point> topQuartile = yearPoints.stream()
@@ -500,7 +503,7 @@ public class SeasonalityService {
         Map<Integer, List<String>> allTickersByYear = new LinkedHashMap<>();
         for (int year : years) {
             List<Point> yearPoints = byYear.get(year);
-            if (yearPoints == null || yearPoints.size() < 4) continue;
+            if (yearPoints == null || yearPoints.size() < 2) continue;
             int quartileSize = (int) Math.ceil(yearPoints.size() / 4.0);
             topQuartileByYear.put(year, yearPoints.stream()
                     .sorted(Comparator.comparingDouble(Point::signalValue).reversed())

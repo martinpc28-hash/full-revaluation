@@ -71,6 +71,17 @@ export default function SeasonalityTab({ setStatus }) {
     return [...new Set([...base, ...manualTickers])];
   }, [universeType, selectedSectors, selectedCountries, manualTickers]);
 
+  // If the user trims the universe down (e.g. to just 2 sectors to compare head-to-head),
+  // a stale higher "mínimo de activos/año" would silently zero out every year's stats —
+  // clamp it down automatically so a 2-asset comparison actually produces numbers. Never
+  // raises it back up on its own, so a deliberately strict threshold on a big universe is
+  // left alone when more assets get added later.
+  useEffect(() => {
+    if (activeTickers.length >= 2 && minAssetsPerYear > activeTickers.length) {
+      setMinAssetsPerYear(activeTickers.length);
+    }
+  }, [activeTickers.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function toggle(set, setSet, ticker) {
     const next = new Set(set);
     if (next.has(ticker)) next.delete(ticker);
@@ -91,8 +102,8 @@ export default function SeasonalityTab({ setStatus }) {
 
   async function runTest({ tickersOverride } = {}) {
     const tickers = tickersOverride || activeTickers;
-    if (tickers.length < 4) {
-      setStatus({ type: "error", text: "Elegí al menos 4 activos — con menos, un cuartil no tiene sentido." });
+    if (tickers.length < 2) {
+      setStatus({ type: "error", text: "Elegí al menos 2 activos." });
       return;
     }
     setTestLoading(true);
@@ -117,8 +128,8 @@ export default function SeasonalityTab({ setStatus }) {
   }
 
   async function runSweep() {
-    if (activeTickers.length < 4) {
-      setStatus({ type: "error", text: "Elegí al menos 4 activos para el barrido de ventanas." });
+    if (activeTickers.length < 2) {
+      setStatus({ type: "error", text: "Elegí al menos 2 activos para el barrido de ventanas." });
       return;
     }
     setSweepLoading(true);
@@ -271,11 +282,18 @@ export default function SeasonalityTab({ setStatus }) {
               <input
                 style={ui.input}
                 type="number"
+                min={2}
                 value={minAssetsPerYear}
                 onChange={(e) => setMinAssetsPerYear(Number(e.target.value))}
               />
             </label>
           </div>
+          {activeTickers.length === 2 && (
+            <p style={{ ...ui.muted, marginTop: 10 }}>
+              Con solo 2 activos el "cuartil superior" es directamente el que ganó ese año — es una comparación
+              cabeza a cabeza, no una estadística de cuartiles propiamente dicha.
+            </p>
+          )}
 
           <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
             <button style={ui.button("primary")} onClick={() => runTest()} disabled={testLoading}>
