@@ -63,8 +63,22 @@ public class SeasonalityService {
         this.assetUniverseService = assetUniverseService;
     }
 
-    private record Point(String ticker, int year, Double signal, Double rest, Double fullYear) {
-        boolean coveredForStats() { return signal != null && rest != null && fullYear != null; }
+    /** One return calculation, kept with everything needed to audit it in the UI: the
+     * requested window, and the actual trading date/price pair the calc landed on (the
+     * ceiling/floor of that window — may differ from the window itself around holidays or
+     * data gaps). value = (endPrice - startPrice) / startPrice, null if there's no data. */
+    private record ReturnCalc(Double value, LocalDate windowStart, LocalDate windowEnd,
+                               LocalDate startDate, BigDecimal startPrice, LocalDate endDate, BigDecimal endPrice) {
+        static ReturnCalc empty(LocalDate windowStart, LocalDate windowEnd) {
+            return new ReturnCalc(null, windowStart, windowEnd, null, null, null, null);
+        }
+    }
+
+    private record Point(String ticker, int year, ReturnCalc signal, ReturnCalc rest, ReturnCalc fullYear) {
+        boolean coveredForStats() { return signal.value() != null && rest.value() != null && fullYear.value() != null; }
+        Double signalValue() { return signal.value(); }
+        Double restValue() { return rest.value(); }
+        Double fullYearValue() { return fullYear.value(); }
     }
 
     // ------------------------------------------------------------------
@@ -104,10 +118,10 @@ public class SeasonalityService {
         ));
         result.put("panel", allPoints.stream().map(this::pointToMap).toList());
         result.put("coverage", coverageReport(allPoints, req.tickers, req.yearFrom, req.yearTo, req.minAssetsPerYear));
-        result.put("correlationVsRest", correlationBlock(statsPoints, Point::signal, Point::rest, true));
-        result.put("correlationVsFullYear", correlationBlock(statsPoints, Point::signal, Point::fullYear, true));
-        result.put("persistenceVsRest", quartilePersistence(statsPoints, Point::rest));
-        result.put("persistenceVsFullYear", quartilePersistence(statsPoints, Point::fullYear));
+        result.put("correlationVsRest", correlationBlock(statsPoints, Point::signalValue, Point::restValue, true));
+        result.put("correlationVsFullYear", correlationBlock(statsPoints, Point::signalValue, Point::fullYearValue, true));
+        result.put("persistenceVsRest", quartilePersistence(statsPoints, Point::restValue));
+        result.put("persistenceVsFullYear", quartilePersistence(statsPoints, Point::fullYearValue));
 
         // Fixed reference lines for the strategy chart — always USD, same source, same
         // signal/hold-period methodology as the strategy itself, regardless of what the
@@ -117,8 +131,8 @@ public class SeasonalityService {
         // needs the actual price series, not just one number per year.
         NavigableMap<LocalDate, BigDecimal> spyCloses = source.fetchDailyCloses("SPY");
         NavigableMap<LocalDate, BigDecimal> urthCloses = source.fetchDailyCloses("URTH");
-        Map<Integer, Double> sp500Rest = restReturnSeriesFromCloses(spyCloses, req.yearFrom, req.yearTo, req.signalStartMonth, req.signalLengthMonths);
-        Map<Integer, Double> msciWorldRest = restReturnSeriesFromCloses(urthCloses, req.yearFrom, req.yearTo, req.signalStartMonth, req.signalLengthMonths);
+        Map<Integer, ReturnCalc> sp500Rest = restReturnSeriesFromCloses("SPY", spyCloses, req.yearFrom, req.yearTo, req.signalStartMonth, req.signalLengthMonths);
+        Map<Integer, ReturnCalc> msciWorldRest = restReturnSeriesFromCloses("URTH", urthCloses, req.yearFrom, req.yearTo, req.signalStartMonth, req.signalLengthMonths);
         result.put("strategy", strategyBacktest(statsPoints, sp500Rest, msciWorldRest, closesByTicker, spyCloses, urthCloses,
                 req.signalStartMonth, req.signalLengthMonths));
         return result;
@@ -126,12 +140,12 @@ public class SeasonalityService {
 
     /** Rest-of-year return for one fixed benchmark ticker, by year — used only for the
      * strategy chart's SPY/URTH reference lines, always fetched in USD. */
-    private Map<Integer, Double> restReturnSeriesFromCloses(NavigableMap<LocalDate, BigDecimal> closes, int yearFrom, int yearTo,
-                                                              int startMonth, int lengthMonths) {
-        Map<Integer, Double> series = new LinkedHashMap<>();
+    private Map<Integer, ReturnCalc> restReturnSeriesFromCloses(String ticker, NavigableMap<LocalDate, BigDecimal> closes, int yearFrom, int yearTo,
+                                                                  int startMonth, int lengthMonths) {
+        Map<Integer, ReturnCalc> series = new LinkedHashMap<>();
         for (int year = yearFrom; year <= yearTo; year++) {
-            Point p = computePoint("BENCH", year, closes, startMonth, lengthMonths);
-            if (p.rest() != null) series.put(year, p.rest());
+            Point p = computePoint(ticker, year, closes, startMonth, lengthMonths);
+            if (p.restValue() != null) series.put(year, p.rest());
         }
         return series;
     }
@@ -166,7 +180,7 @@ public class SeasonalityService {
                         .filter(p -> countByYear.getOrDefault(p.year(), 0L) >= req.minAssetsPerYear)
                         .toList();
 
-                Map<String, Object> corr = correlationBlock(covered, Point::signal, Point::rest, false); // no p-value: 33 cells x permutation would be slow
+                Map<String, Object> corr = correlationBlock(covered, Point::signalValue, Point::restValue, false); // no p-value: 33 cells x permutation would be slow
                 Map<String, Object> cell = new LinkedHashMap<>();
                 cell.put("startMonth", startMonth);
                 cell.put("lengthMonths", lengthMonths);
@@ -212,42 +226,64 @@ public class SeasonalityService {
 
     private Point computePoint(String ticker, int year, NavigableMap<LocalDate, BigDecimal> closes,
                                 int startMonth, int lengthMonths) {
-        if (closes == null || closes.isEmpty()) {
-            return new Point(ticker, year, null, null, null);
-        }
         LocalDate windowStart = LocalDate.of(year, startMonth, 1);
         LocalDate windowEnd = windowStart.plusMonths(lengthMonths).minusDays(1);
         LocalDate yearStart = LocalDate.of(year, 1, 1);
         LocalDate yearEnd = LocalDate.of(year, 12, 31);
 
-        Double signal = toDouble(cumulativeReturn(closes, windowStart, windowEnd));
-        Double rest = windowEnd.isBefore(yearEnd) ? toDouble(cumulativeReturn(closes, windowEnd.plusDays(1), yearEnd)) : null;
-        Double fullYear = toDouble(cumulativeReturn(closes, yearStart, yearEnd));
+        ReturnCalc signal = computeReturnCalc(closes, windowStart, windowEnd);
+        ReturnCalc rest = windowEnd.isBefore(yearEnd)
+                ? computeReturnCalc(closes, windowEnd.plusDays(1), yearEnd)
+                : ReturnCalc.empty(windowEnd.plusDays(1), yearEnd);
+        ReturnCalc fullYear = computeReturnCalc(closes, yearStart, yearEnd);
         return new Point(ticker, year, signal, rest, fullYear);
     }
 
-    private BigDecimal cumulativeReturn(NavigableMap<LocalDate, BigDecimal> closes, LocalDate from, LocalDate to) {
+    /** Core return calc, kept alongside the exact dates/prices used — this is what powers the
+     * "audit this number" panel in the UI: value = (endPrice - startPrice) / startPrice, where
+     * startPrice/endPrice are the closes on the first trading day on/after `from` and the last
+     * trading day on/before `to` respectively (may not exactly equal from/to around holidays or
+     * missing data — that's why both the requested window and the actual dates used are kept). */
+    private ReturnCalc computeReturnCalc(NavigableMap<LocalDate, BigDecimal> closes, LocalDate from, LocalDate to) {
+        if (closes == null || closes.isEmpty()) return ReturnCalc.empty(from, to);
         Map.Entry<LocalDate, BigDecimal> startEntry = closes.ceilingEntry(from);
         Map.Entry<LocalDate, BigDecimal> endEntry = closes.floorEntry(to);
-        if (startEntry == null || endEntry == null) return null;
-        if (startEntry.getKey().isAfter(endEntry.getKey())) return null;
+        if (startEntry == null || endEntry == null || startEntry.getKey().isAfter(endEntry.getKey())) {
+            return ReturnCalc.empty(from, to);
+        }
         BigDecimal startPrice = startEntry.getValue();
-        if (startPrice.signum() == 0) return null;
-        return endEntry.getValue().subtract(startPrice).divide(startPrice, MathContext.DECIMAL64);
+        if (startPrice.signum() == 0) return ReturnCalc.empty(from, to);
+        BigDecimal endPrice = endEntry.getValue();
+        double value = endPrice.subtract(startPrice).divide(startPrice, MathContext.DECIMAL64).doubleValue();
+        return new ReturnCalc(value, from, to, startEntry.getKey(), startPrice, endEntry.getKey(), endPrice);
     }
 
-    private Double toDouble(BigDecimal value) {
-        return value == null ? null : value.doubleValue();
+    /** JSON-friendly audit trail for one return calculation, shown in the UI's "auditar este
+     * número" panel: which ticker, which window, and the exact start/end date+price used. */
+    private Map<String, Object> auditMap(String ticker, ReturnCalc rc) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("ticker", ticker);
+        m.put("value", rc.value());
+        m.put("windowStart", rc.windowStart() == null ? null : rc.windowStart().toString());
+        m.put("windowEnd", rc.windowEnd() == null ? null : rc.windowEnd().toString());
+        m.put("startDate", rc.startDate() == null ? null : rc.startDate().toString());
+        m.put("startPrice", rc.startPrice());
+        m.put("endDate", rc.endDate() == null ? null : rc.endDate().toString());
+        m.put("endPrice", rc.endPrice());
+        return m;
     }
 
     private Map<String, Object> pointToMap(Point p) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("ticker", p.ticker());
         m.put("year", p.year());
-        m.put("signalReturn", p.signal());
-        m.put("restReturn", p.rest());
-        m.put("fullYearReturn", p.fullYear());
+        m.put("signalReturn", p.signal().value());
+        m.put("restReturn", p.rest().value());
+        m.put("fullYearReturn", p.fullYear().value());
         m.put("covered", p.coveredForStats());
+        m.put("signalAudit", auditMap(p.ticker(), p.signal()));
+        m.put("restAudit", auditMap(p.ticker(), p.rest()));
+        m.put("fullYearAudit", auditMap(p.ticker(), p.fullYear()));
         return m;
     }
 
@@ -352,7 +388,7 @@ public class SeasonalityService {
             int quartileSize = (int) Math.ceil(yearPoints.size() / 4.0);
 
             Set<String> topBySignal = yearPoints.stream()
-                    .sorted(Comparator.comparingDouble(Point::signal).reversed())
+                    .sorted(Comparator.comparingDouble(Point::signalValue).reversed())
                     .limit(quartileSize)
                     .map(Point::ticker)
                     .collect(Collectors.toSet());
@@ -387,12 +423,12 @@ public class SeasonalityService {
     /** Equal-weight top-quartile-by-signal portfolio, held for the REST of the year (buying at the end of the
      * signal window, since that's the earliest point the signal is actually known — using the full-year return
      * here would be look-ahead bias), vs. the equal-weighted full universe over the same holding period. */
-    private Map<String, Object> strategyBacktest(List<Point> points, Map<Integer, Double> sp500Rest, Map<Integer, Double> msciWorldRest,
+    private Map<String, Object> strategyBacktest(List<Point> points, Map<Integer, ReturnCalc> sp500Rest, Map<Integer, ReturnCalc> msciWorldRest,
                                                    Map<String, NavigableMap<LocalDate, BigDecimal>> closesByTicker,
                                                    NavigableMap<LocalDate, BigDecimal> spyCloses, NavigableMap<LocalDate, BigDecimal> urthCloses,
                                                    int startMonth, int lengthMonths) {
         Map<Integer, List<Point>> byYear = points.stream()
-                .filter(p -> p.rest() != null)
+                .filter(p -> p.restValue() != null)
                 .collect(Collectors.groupingBy(Point::year));
 
         List<Map<String, Object>> perYear = new ArrayList<>();
@@ -402,18 +438,22 @@ public class SeasonalityService {
             int quartileSize = (int) Math.ceil(yearPoints.size() / 4.0);
 
             List<Point> topQuartile = yearPoints.stream()
-                    .sorted(Comparator.comparingDouble(Point::signal).reversed())
+                    .sorted(Comparator.comparingDouble(Point::signalValue).reversed())
                     .limit(quartileSize)
                     .toList();
 
-            double strategyReturn = topQuartile.stream().mapToDouble(Point::rest).average().orElse(0);
-            double benchmarkReturn = yearPoints.stream().mapToDouble(Point::rest).average().orElse(0);
+            double strategyReturn = topQuartile.stream().mapToDouble(Point::restValue).average().orElse(0);
+            double benchmarkReturn = yearPoints.stream().mapToDouble(Point::restValue).average().orElse(0);
 
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("year", e.getKey());
             row.put("strategyReturn", strategyReturn);
             row.put("benchmarkReturn", benchmarkReturn);
             row.put("diff", strategyReturn - benchmarkReturn);
+            // Audit trail: exactly which tickers make up this average, and each one's own
+            // start/end date+price — this is what the UI's "auditar" click shows.
+            row.put("strategyReturnAudit", topQuartile.stream().map(p -> auditMap(p.ticker(), p.rest())).toList());
+            row.put("benchmarkReturnAudit", yearPoints.stream().map(p -> auditMap(p.ticker(), p.rest())).toList());
             perYear.add(row);
         }
         perYear.sort(Comparator.comparing(m -> (Integer) m.get("year")));
@@ -427,9 +467,10 @@ public class SeasonalityService {
 
         if (includeSp500) {
             for (Map<String, Object> row : perYear) {
-                double sp500Return = sp500Rest.get((Integer) row.get("year"));
-                row.put("sp500Return", sp500Return);
-                row.put("diffVsSp500", (double) row.get("strategyReturn") - sp500Return);
+                ReturnCalc rc = sp500Rest.get((Integer) row.get("year"));
+                row.put("sp500Return", rc.value());
+                row.put("diffVsSp500", (double) row.get("strategyReturn") - rc.value());
+                row.put("sp500ReturnAudit", List.of(auditMap("SPY", rc)));
             }
         }
 
@@ -439,8 +480,8 @@ public class SeasonalityService {
             int year = (Integer) row.get("year");
             cumStrategy *= 1.0 + (double) row.get("strategyReturn");
             cumBenchmark *= 1.0 + (double) row.get("benchmarkReturn");
-            if (includeSp500) cumSp500 *= 1.0 + sp500Rest.get(year);
-            if (includeMsciWorld) cumMsciWorld *= 1.0 + msciWorldRest.get(year);
+            if (includeSp500) cumSp500 *= 1.0 + sp500Rest.get(year).value();
+            if (includeMsciWorld) cumMsciWorld *= 1.0 + msciWorldRest.get(year).value();
 
             Map<String, Object> point = new LinkedHashMap<>();
             point.put("year", year);
@@ -462,7 +503,7 @@ public class SeasonalityService {
             if (yearPoints == null || yearPoints.size() < 4) continue;
             int quartileSize = (int) Math.ceil(yearPoints.size() / 4.0);
             topQuartileByYear.put(year, yearPoints.stream()
-                    .sorted(Comparator.comparingDouble(Point::signal).reversed())
+                    .sorted(Comparator.comparingDouble(Point::signalValue).reversed())
                     .limit(quartileSize)
                     .map(Point::ticker)
                     .toList());

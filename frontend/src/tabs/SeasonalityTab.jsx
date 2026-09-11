@@ -4,6 +4,17 @@ import { ui, colors } from "../theme.js";
 import HeatmapGrid, { divergingColor } from "../HeatmapGrid.jsx";
 import ScatterChart from "../ScatterChart.jsx";
 import LineChart from "../LineChart.jsx";
+import AuditPanel from "../AuditPanel.jsx";
+
+// Shared style for any "Retorno" number the user can click to audit (see AuditPanel) —
+// a dotted underline + pointer cursor signals it's interactive without being noisy.
+const auditableCell = {
+  cursor: "pointer",
+  textDecoration: "underline",
+  textDecorationStyle: "dotted",
+  textDecorationColor: colors.border,
+  textUnderlineOffset: 3,
+};
 
 const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 const CURRENT_YEAR = new Date().getFullYear();
@@ -36,6 +47,7 @@ export default function SeasonalityTab({ setStatus }) {
   const [sweepResult, setSweepResult] = useState(null);
   const [testLoading, setTestLoading] = useState(false);
   const [sweepLoading, setSweepLoading] = useState(false);
+  const [audit, setAudit] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -276,8 +288,10 @@ export default function SeasonalityTab({ setStatus }) {
         </div>
       </div>
 
-      {testResult && <TestResults result={testResult} />}
+      {testResult && <TestResults result={testResult} onAudit={setAudit} />}
       {sweepResult && <SweepResults result={sweepResult} />}
+
+      <AuditPanel audit={audit} onClose={() => setAudit(null)} />
     </div>
   );
 }
@@ -370,7 +384,13 @@ function PersistenceTable({ persistenceRest, persistenceFullYear }) {
   );
 }
 
-function RankingHeatmaps({ panel, tickers, yearFrom, yearTo }) {
+const HEATMAP_FIELD_META = {
+  signalReturn: { auditField: "signalAudit", label: "Retorno — ventana de señal" },
+  restReturn: { auditField: "restAudit", label: "Retorno — resto del año" },
+  fullYearReturn: { auditField: "fullYearAudit", label: "Retorno — año completo" },
+};
+
+function RankingHeatmaps({ panel, tickers, yearFrom, yearTo, onAudit }) {
   const years = [];
   for (let y = yearFrom; y <= yearTo; y++) years.push(y);
   const byKey = new Map(panel.map((p) => [`${p.ticker}-${p.year}`, p]));
@@ -389,17 +409,23 @@ function RankingHeatmaps({ panel, tickers, yearFrom, yearTo }) {
   }
 
   function buildCells(field, { highlightWinner = false } = {}) {
+    const { auditField, label } = HEATMAP_FIELD_META[field];
     return tickers.map((t) =>
       years.map((y) => {
         const p = byKey.get(`${t}-${y}`);
         const v = p ? p[field] : null;
         const isWinner = highlightWinner && winnerByYear.get(y) === t;
+        const componentAudit = p ? p[auditField] : null;
         return {
           label: v === null || v === undefined ? "" : `${isWinner ? "🏆" : ""}${(v * 100).toFixed(0)}%`,
           color: v === null || v === undefined ? "#f3f4f6" : divergingColor(v, 0.4),
           title: p
-            ? `${t} ${y}: ${(v * 100).toFixed(1)}%${isWinner ? " — ganador de la ventana de señal ese año" : ""}`
+            ? `${t} ${y}: ${(v * 100).toFixed(1)}%${isWinner ? " — ganador de la ventana de señal ese año" : ""} — click para auditar`
             : "sin datos",
+          onClick:
+            componentAudit && componentAudit.value !== null
+              ? () => onAudit({ title: `${t} · ${y}`, subtitle: label, components: [componentAudit] })
+              : undefined,
         };
       })
     );
@@ -433,11 +459,12 @@ function RankingHeatmaps({ panel, tickers, yearFrom, yearTo }) {
           <HeatmapGrid rowLabels={tickers} colLabels={years} cells={buildCells("fullYearReturn")} cellWidth={44} rowLabelWidth={70} />
         </div>
       </div>
+      <p style={{ ...ui.muted, margin: 0 }}>💡 Click en cualquier celda con valor para ver el cálculo exacto (fechas y precios usados).</p>
     </div>
   );
 }
 
-function TestResults({ result }) {
+function TestResults({ result, onAudit }) {
   const { meta, panel, coverage, correlationVsRest, correlationVsFullYear, persistenceVsRest, persistenceVsFullYear, strategy } = result;
   const tickers = meta.tickers;
 
@@ -463,7 +490,7 @@ function TestResults({ result }) {
 
       <div style={ui.card}>
         <h3 style={ui.cardTitle}>Heatmap de retornos por año</h3>
-        <RankingHeatmaps panel={panel} tickers={tickers} yearFrom={meta.yearFrom} yearTo={meta.yearTo} />
+        <RankingHeatmaps panel={panel} tickers={tickers} yearFrom={meta.yearFrom} yearTo={meta.yearTo} onAudit={onAudit} />
       </div>
 
       <div style={ui.card}>
@@ -573,8 +600,24 @@ function TestResults({ result }) {
               {strategy.perYear.map((r) => (
                 <tr key={r.year}>
                   <td style={ui.td}>{r.year}</td>
-                  <td style={ui.td}>{pct(r.strategyReturn)}</td>
-                  <td style={ui.td}>{pct(r.benchmarkReturn)}</td>
+                  <td
+                    style={{ ...ui.td, ...auditableCell }}
+                    title="Click para auditar este número"
+                    onClick={() =>
+                      onAudit({ title: `Cuartil superior · ${r.year}`, subtitle: "Retorno resto del año (equiponderado)", components: r.strategyReturnAudit })
+                    }
+                  >
+                    {pct(r.strategyReturn)}
+                  </td>
+                  <td
+                    style={{ ...ui.td, ...auditableCell }}
+                    title="Click para auditar este número"
+                    onClick={() =>
+                      onAudit({ title: `Universo · ${r.year}`, subtitle: "Retorno resto del año (equiponderado, todo el universo)", components: r.benchmarkReturnAudit })
+                    }
+                  >
+                    {pct(r.benchmarkReturn)}
+                  </td>
                   <td style={{ ...ui.td, color: r.diff >= 0 ? colors.success : colors.danger, fontWeight: 700 }}>
                     {r.diff >= 0 ? "+" : ""}
                     {pct(r.diff)}
@@ -605,8 +648,24 @@ function TestResults({ result }) {
                 {strategy.perYear.map((r) => (
                   <tr key={r.year}>
                     <td style={ui.td}>{r.year}</td>
-                    <td style={ui.td}>{pct(r.strategyReturn)}</td>
-                    <td style={ui.td}>{pct(r.sp500Return)}</td>
+                    <td
+                      style={{ ...ui.td, ...auditableCell }}
+                      title="Click para auditar este número"
+                      onClick={() =>
+                        onAudit({ title: `Cuartil superior · ${r.year}`, subtitle: "Retorno resto del año (equiponderado)", components: r.strategyReturnAudit })
+                      }
+                    >
+                      {pct(r.strategyReturn)}
+                    </td>
+                    <td
+                      style={{ ...ui.td, ...auditableCell }}
+                      title="Click para auditar este número"
+                      onClick={() =>
+                        onAudit({ title: `S&P 500 · ${r.year}`, subtitle: "Retorno resto del año (SPY, USD)", components: r.sp500ReturnAudit })
+                      }
+                    >
+                      {pct(r.sp500Return)}
+                    </td>
                     <td style={{ ...ui.td, color: r.diffVsSp500 >= 0 ? colors.success : colors.danger, fontWeight: 700 }}>
                       {r.diffVsSp500 >= 0 ? "+" : ""}
                       {pct(r.diffVsSp500)}

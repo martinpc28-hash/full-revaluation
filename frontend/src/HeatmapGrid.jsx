@@ -48,6 +48,7 @@ export default function HeatmapGrid({ rowLabels, colLabels, cells, rowLabelWidth
                 <td
                   key={cIdx}
                   title={cell.title || ""}
+                  onClick={cell.onClick}
                   style={{
                     width: cellWidth,
                     height: cellHeight,
@@ -57,6 +58,7 @@ export default function HeatmapGrid({ rowLabels, colLabels, cells, rowLabelWidth
                     color: cell.textColor || "#1a1f2b",
                     border: "1px solid #fff",
                     fontVariantNumeric: "tabular-nums",
+                    cursor: cell.onClick ? "pointer" : "default",
                   }}
                 >
                   {cell.label}
