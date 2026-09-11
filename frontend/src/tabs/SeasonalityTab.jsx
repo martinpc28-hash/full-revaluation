@@ -566,7 +566,7 @@ function TestResults({ result }) {
                 <th style={ui.th}>Cuartil superior</th>
                 <th style={ui.th}>Universo</th>
                 <th style={ui.th}>Diferencial</th>
-                <th style={ui.th}>Drawdown (cuartil sup.)</th>
+                <th style={ui.th}>Max Drawdown (cuartil sup.)</th>
               </tr>
             </thead>
             <tbody>
@@ -597,8 +597,8 @@ function TestResults({ result }) {
                   <th style={ui.th}>Cuartil superior</th>
                   <th style={ui.th}>S&amp;P 500</th>
                   <th style={ui.th}>Diferencial</th>
-                  <th style={ui.th}>Drawdown (cuartil sup.)</th>
-                  <th style={ui.th}>Drawdown (S&amp;P 500)</th>
+                  <th style={ui.th}>Max Drawdown (cuartil sup.)</th>
+                  <th style={ui.th}>Max Drawdown (S&amp;P 500)</th>
                 </tr>
               </thead>
               <tbody>
