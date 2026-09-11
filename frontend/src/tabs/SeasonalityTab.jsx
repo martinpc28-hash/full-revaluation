@@ -521,6 +521,41 @@ function TestResults({ result }) {
             ...(strategy.msciWorldAvailable ? [{ key: "cumulativeMsciWorld", label: "MSCI World", color: "#9333ea" }] : []),
           ]}
         />
+
+        <div style={{ ...ui.tableScroll, marginTop: 12 }}>
+          <table style={ui.table}>
+            <thead>
+              <tr>
+                <th style={ui.th}>Serie</th>
+                <th style={ui.th}>Volatilidad anual</th>
+                <th style={ui.th}>Máximo drawdown</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { key: "strategy", label: "Cuartil superior", show: true },
+                { key: "benchmark", label: "Universo", show: true },
+                { key: "sp500", label: "S&P 500", show: strategy.sp500Available },
+                { key: "msciWorld", label: "MSCI World", show: strategy.msciWorldAvailable },
+              ]
+                .filter((s) => s.show && strategy.stats[s.key])
+                .map((s) => (
+                  <tr key={s.key}>
+                    <td style={ui.td}>{s.label}</td>
+                    <td style={ui.td}>{pct(strategy.stats[s.key].volatility)}</td>
+                    <td style={{ ...ui.td, color: colors.danger, fontWeight: 700 }}>
+                      {pct(strategy.stats[s.key].maxDrawdown)}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+        <p style={ui.muted}>
+          Volatilidad = desviación estándar de los retornos anuales (no diaria). Máximo drawdown = la mayor caída
+          desde un pico hasta un valle en la curva acumulada de cada serie.
+        </p>
+
         <div style={{ ...ui.tableScroll, marginTop: 12 }}>
           <table style={ui.table}>
             <thead>

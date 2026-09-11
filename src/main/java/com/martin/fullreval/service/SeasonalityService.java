@@ -444,11 +444,53 @@ public class SeasonalityService {
             cumulative.add(point);
         }
 
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("strategy", seriesStats(pluck(perYear, "strategyReturn"), wealthIndex(cumulative, "cumulativeStrategy")));
+        stats.put("benchmark", seriesStats(pluck(perYear, "benchmarkReturn"), wealthIndex(cumulative, "cumulativeBenchmark")));
+        if (includeSp500) {
+            stats.put("sp500", seriesStats(years.stream().map(sp500Rest::get).toList(), wealthIndex(cumulative, "cumulativeSp500")));
+        }
+        if (includeMsciWorld) {
+            stats.put("msciWorld", seriesStats(years.stream().map(msciWorldRest::get).toList(), wealthIndex(cumulative, "cumulativeMsciWorld")));
+        }
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("perYear", perYear);
         result.put("cumulative", cumulative);
         result.put("sp500Available", includeSp500);
         result.put("msciWorldAvailable", includeMsciWorld);
+        result.put("stats", stats);
         return result;
+    }
+
+    private List<Double> pluck(List<Map<String, Object>> rows, String key) {
+        return rows.stream().map(r -> (Double) r.get(key)).toList();
+    }
+
+    /** Wealth index (starting at 1.0) rebuilt from a cumulative-return series, for drawdown math. */
+    private List<Double> wealthIndex(List<Map<String, Object>> cumulative, String key) {
+        List<Double> wealth = new ArrayList<>();
+        wealth.add(1.0);
+        for (Map<String, Object> row : cumulative) {
+            wealth.add((Double) row.get(key) + 1.0);
+        }
+        return wealth;
+    }
+
+    /** Annualized-ish volatility (stdev of yearly returns) and max drawdown for one series. */
+    private Map<String, Object> seriesStats(List<Double> yearlyReturns, List<Double> wealth) {
+        double mean = yearlyReturns.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+        double variance = yearlyReturns.size() < 2 ? 0
+                : yearlyReturns.stream().mapToDouble(r -> Math.pow(r - mean, 2)).sum() / (yearlyReturns.size() - 1);
+        double volatility = Math.sqrt(variance);
+
+        double peak = wealth.isEmpty() ? 1.0 : wealth.get(0);
+        double maxDrawdown = 0.0;
+        for (double w : wealth) {
+            peak = Math.max(peak, w);
+            maxDrawdown = Math.min(maxDrawdown, (w - peak) / peak);
+        }
+
+        return Map.of("volatility", volatility, "maxDrawdown", maxDrawdown);
     }
 }
