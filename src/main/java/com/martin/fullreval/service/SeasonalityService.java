@@ -209,7 +209,8 @@ public class SeasonalityService {
      * CAGR / volatility — a Sharpe-ratio-shaped number (no risk-free rate subtracted) used only
      * to RANK combinations against each other, not as a standalone risk-adjusted metric. */
     private record ComboResult(String universe, int startMonth, int lengthMonths, int yearsUsed,
-                                double totalReturn, double cagr, double volatility, double maxDrawdown, double score) {}
+                                double totalReturn, double cagr, double volatility, double maxDrawdown, double score,
+                                Map<Integer, List<String>> topQuartileByYear) {}
 
     public Map<String, Object> runMonteCarlo(SeasonalityMonteCarloRequest req) {
         validateYearRange(req.yearFrom, req.yearTo);
@@ -296,7 +297,8 @@ public class SeasonalityService {
         double totalReturn = cumStrategy - 1.0;
         double cagr = Math.pow(cumStrategy, 1.0 / usableYears.size()) - 1.0;
         double score = daily.volatility() > 0 ? cagr / daily.volatility() : 0.0;
-        return new ComboResult(universeLabel, startMonth, lengthMonths, usableYears.size(), totalReturn, cagr, daily.volatility(), daily.maxDrawdown(), score);
+        return new ComboResult(universeLabel, startMonth, lengthMonths, usableYears.size(), totalReturn, cagr,
+                daily.volatility(), daily.maxDrawdown(), score, topQuartileByYear);
     }
 
     private Map<String, Object> comboToMap(ComboResult c) {
@@ -310,6 +312,7 @@ public class SeasonalityService {
         m.put("volatility", c.volatility());
         m.put("maxDrawdown", c.maxDrawdown());
         m.put("score", c.score());
+        m.put("picksByYear", c.topQuartileByYear());
         return m;
     }
 

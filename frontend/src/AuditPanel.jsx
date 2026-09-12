@@ -85,13 +85,10 @@ const ui_muted = { color: colors.textMuted, fontSize: 13 };
 const cellLabelStyle = { padding: "3px 0", color: colors.textMuted, whiteSpace: "nowrap", width: "42%" };
 const cellValueStyle = { padding: "3px 0", textAlign: "right" };
 
-export default function AuditPanel({ audit, onClose }) {
-  if (!audit) return null;
-  const components = audit.components || [];
-  const isAverage = components.length > 1;
-  const validValues = components.map((c) => c.value).filter((v) => v !== null && v !== undefined);
-  const average = validValues.length ? validValues.reduce((a, b) => a + b, 0) / validValues.length : null;
-
+// Generic left-side sliding drawer shell (backdrop + header with kicker/title/subtitle +
+// close button + scrollable body) — reused by AuditPanel and by anything else that wants
+// the same "click something, get a detail panel on the left" interaction.
+export function Drawer({ kicker, title, subtitle, onClose, children }) {
   return (
     <>
       <div
@@ -130,11 +127,13 @@ export default function AuditPanel({ audit, onClose }) {
           }}
         >
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: colors.primary }}>
-              🔍 Auditoría del retorno
-            </div>
-            <h3 style={{ margin: "4px 0 0 0", fontSize: 16 }}>{audit.title}</h3>
-            {audit.subtitle && <p style={{ margin: "4px 0 0 0", fontSize: 12.5, color: colors.textMuted }}>{audit.subtitle}</p>}
+            {kicker && (
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: colors.primary }}>
+                {kicker}
+              </div>
+            )}
+            <h3 style={{ margin: "4px 0 0 0", fontSize: 16 }}>{title}</h3>
+            {subtitle && <p style={{ margin: "4px 0 0 0", fontSize: 12.5, color: colors.textMuted }}>{subtitle}</p>}
           </div>
           <button
             onClick={onClose}
@@ -153,43 +152,55 @@ export default function AuditPanel({ audit, onClose }) {
           </button>
         </div>
 
-        <div style={{ padding: 18, overflowY: "auto", flex: 1 }}>
-          {isAverage && (
-            <div
-              style={{
-                background: colors.primarySoft,
-                border: `1px solid ${colors.border}`,
-                borderRadius: 10,
-                padding: 14,
-                marginBottom: 16,
-              }}
-            >
-              <p style={{ margin: 0, fontSize: 13 }}>
-                Este número es el <strong>promedio equiponderado</strong> de {components.length} activo
-                {components.length === 1 ? "" : "s"}, cada uno calculado igual que en las tarjetas de abajo:
-              </p>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-                  fontSize: 12.5,
-                  color: colors.textMuted,
-                }}
-              >
-                ({components.map((c) => formatPct(c.value, 1)).join(" + ")}) / {components.length} = {formatPct(average)}
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {components.map((c, i) => (
-              <ComponentDetail key={`${c.ticker}-${i}`} c={c} />
-            ))}
-          </div>
-
-          {components.length === 0 && <p style={ui_muted}>No hay datos disponibles para auditar este valor.</p>}
-        </div>
+        <div style={{ padding: 18, overflowY: "auto", flex: 1 }}>{children}</div>
       </div>
     </>
+  );
+}
+
+export default function AuditPanel({ audit, onClose }) {
+  if (!audit) return null;
+  const components = audit.components || [];
+  const isAverage = components.length > 1;
+  const validValues = components.map((c) => c.value).filter((v) => v !== null && v !== undefined);
+  const average = validValues.length ? validValues.reduce((a, b) => a + b, 0) / validValues.length : null;
+
+  return (
+    <Drawer kicker="🔍 Auditoría del retorno" title={audit.title} subtitle={audit.subtitle} onClose={onClose}>
+      {isAverage && (
+        <div
+          style={{
+            background: colors.primarySoft,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 10,
+            padding: 14,
+            marginBottom: 16,
+          }}
+        >
+          <p style={{ margin: 0, fontSize: 13 }}>
+            Este número es el <strong>promedio equiponderado</strong> de {components.length} activo
+            {components.length === 1 ? "" : "s"}, cada uno calculado igual que en las tarjetas de abajo:
+          </p>
+          <div
+            style={{
+              marginTop: 8,
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+              fontSize: 12.5,
+              color: colors.textMuted,
+            }}
+          >
+            ({components.map((c) => formatPct(c.value, 1)).join(" + ")}) / {components.length} = {formatPct(average)}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {components.map((c, i) => (
+          <ComponentDetail key={`${c.ticker}-${i}`} c={c} />
+        ))}
+      </div>
+
+      {components.length === 0 && <p style={ui_muted}>No hay datos disponibles para auditar este valor.</p>}
+    </Drawer>
   );
 }

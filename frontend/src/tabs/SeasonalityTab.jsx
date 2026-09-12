@@ -4,7 +4,7 @@ import { ui, colors } from "../theme.js";
 import HeatmapGrid, { divergingColor } from "../HeatmapGrid.jsx";
 import ScatterChart from "../ScatterChart.jsx";
 import LineChart from "../LineChart.jsx";
-import AuditPanel from "../AuditPanel.jsx";
+import AuditPanel, { Drawer } from "../AuditPanel.jsx";
 
 // Shared style for any "Retorno" number the user can click to audit (see AuditPanel) —
 // a dotted underline + pointer cursor signals it's interactive without being noisy.
@@ -18,8 +18,14 @@ const auditableCell = {
 
 const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 const UNIVERSE_LABELS = { SECTOR: "Sectores", COUNTRY: "Países" };
+
+// e.g. startMonth=1 (Ene), lengthMonths=1 → señal es SOLO enero, y la cartera se compra
+// entrando febrero (el mes siguiente al último de la ventana) y se mantiene hasta el 31/12.
+// Se muestra explícito porque "Ene (1m)" solo, sin la flecha, generaba confusión sobre
+// cuándo arranca realmente la cartera.
 function windowLabel(startMonth, lengthMonths) {
-  return `${MONTH_NAMES[startMonth - 1]} (${lengthMonths}m)`;
+  const holdStartMonth = startMonth + lengthMonths; // siempre <=12 para combos que sí aparecen
+  return `${MONTH_NAMES[startMonth - 1]} (${lengthMonths}m) → cartera desde ${MONTH_NAMES[holdStartMonth - 1]}`;
 }
 const CURRENT_YEAR = new Date().getFullYear();
 const DEFAULT_YEAR_FROM = Math.max(2001, CURRENT_YEAR - 20);
@@ -961,6 +967,7 @@ function MonteCarloSection({
 
 function MonteCarloResults({ result }) {
   const { meta, combos, best } = result;
+  const [picksDetail, setPicksDetail] = useState(null);
 
   if (!combos || combos.length === 0) {
     return <p style={{ ...ui.muted, marginTop: 16 }}>Ninguna combinación tuvo datos suficientes con esta configuración.</p>;
@@ -974,6 +981,8 @@ function MonteCarloResults({ result }) {
 
       {best && (
         <div
+          onClick={() => setPicksDetail(best)}
+          title="Click para ver qué activos eligió esta combinación cada año"
           style={{
             background: colors.primarySoft,
             border: `1px solid ${colors.border}`,
@@ -981,6 +990,7 @@ function MonteCarloResults({ result }) {
             padding: 16,
             marginTop: 8,
             marginBottom: 16,
+            cursor: "pointer",
           }}
         >
           <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: colors.primary }}>
@@ -1006,6 +1016,9 @@ function MonteCarloResults({ result }) {
               Años usados: <strong>{best.yearsUsed}</strong>
             </span>
           </div>
+          <div style={{ marginTop: 10, fontSize: 12, color: colors.primary, fontWeight: 600 }}>
+            👆 Click para ver qué activos eligió cada año
+          </div>
         </div>
       )}
 
@@ -1023,6 +1036,7 @@ function MonteCarloResults({ result }) {
               <th style={ui.th}>Max Drawdown</th>
               <th style={ui.th}>Score (CAGR/Vol)</th>
               <th style={ui.th}>Años</th>
+              <th style={ui.th}>Activos</th>
             </tr>
           </thead>
           <tbody>
@@ -1039,6 +1053,14 @@ function MonteCarloResults({ result }) {
                 <td style={{ ...ui.td, color: colors.danger }}>{pct(c.maxDrawdown)}</td>
                 <td style={ui.td}>{c.score.toFixed(2)}</td>
                 <td style={ui.td}>{c.yearsUsed}</td>
+                <td style={ui.td}>
+                  <button
+                    style={{ ...ui.button("ghost"), height: "auto", padding: "2px 8px", fontSize: 12.5, color: colors.primary }}
+                    onClick={() => setPicksDetail(c)}
+                  >
+                    Ver ▸
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -1050,7 +1072,47 @@ function MonteCarloResults({ result }) {
         se usa solo para ORDENAR las combinaciones entre sí, no es una métrica financiera estándar por sí sola. Esto
         es un backtest histórico: no garantiza que la misma combinación vaya a repetirse en el futuro.
       </p>
+
+      {picksDetail && <ComboPicksDrawer detail={picksDetail} onClose={() => setPicksDetail(null)} />}
     </div>
+  );
+}
+
+function ComboPicksDrawer({ detail, onClose }) {
+  const years = Object.keys(detail.picksByYear || {})
+    .map(Number)
+    .sort((a, b) => a - b);
+
+  return (
+    <Drawer
+      kicker="📋 Composición de la cartera"
+      title={`${UNIVERSE_LABELS[detail.universe]} · Señal ${windowLabel(detail.startMonth, detail.lengthMonths)}`}
+      subtitle="Activos del cuartil superior por señal que esta combinación eligió cada año — comprados al empezar el mes de 'cartera desde', mantenidos hasta el 31 de diciembre."
+      onClose={onClose}
+    >
+      {years.length === 0 ? (
+        <p style={ui.muted}>No hay datos de composición para esta combinación.</p>
+      ) : (
+        <div style={ui.tableScroll}>
+          <table style={ui.table}>
+            <thead>
+              <tr>
+                <th style={ui.th}>Año</th>
+                <th style={ui.th}>Activos elegidos</th>
+              </tr>
+            </thead>
+            <tbody>
+              {years.map((year) => (
+                <tr key={year}>
+                  <td style={ui.td}>{year}</td>
+                  <td style={{ ...ui.td, whiteSpace: "normal" }}>{(detail.picksByYear[year] || []).join(", ") || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Drawer>
   );
 }
 
