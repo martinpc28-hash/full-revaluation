@@ -483,12 +483,20 @@ function RankingHeatmaps({ panel, tickers, yearFrom, yearTo, onAudit }) {
 }
 
 // Footer row for the per-year strategy tables: how many years the differential came out
-// positive vs. negative, out of the years with actual data — a quick "does this beat the
-// benchmark more often than not" tally to put the year-by-year detail above in context.
-function DiffScoreRow({ perYear, diffKey, colSpan }) {
+// positive vs. negative, out of the years with actual data (a quick "does this beat the
+// benchmark more often than not" tally), plus the total alpha actually generated over the
+// whole period — the spread between the strategy's and the benchmark's TOTAL compounded
+// return (last point of the cumulative curve), not a sum or average of the yearly diffs.
+// That distinction matters: compounding means the two aren't the same number.
+function DiffScoreRow({ perYear, diffKey, cumulative, strategyCumKey, benchmarkCumKey, colSpan }) {
   const rows = perYear.filter((r) => r[diffKey] !== null && r[diffKey] !== undefined);
   const positive = rows.filter((r) => r[diffKey] >= 0).length;
   const pctPositive = rows.length ? Math.round((positive / rows.length) * 100) : 0;
+
+  const lastCumulative = cumulative && cumulative.length ? cumulative[cumulative.length - 1] : null;
+  const hasAlpha = lastCumulative && lastCumulative[strategyCumKey] !== undefined && lastCumulative[benchmarkCumKey] !== undefined;
+  const totalAlpha = hasAlpha ? lastCumulative[strategyCumKey] - lastCumulative[benchmarkCumKey] : null;
+
   return (
     <tr>
       <td
@@ -497,13 +505,21 @@ function DiffScoreRow({ perYear, diffKey, colSpan }) {
           ...ui.td,
           borderTop: `2px solid ${colors.border}`,
           borderBottom: "none",
-          fontWeight: 700,
-          color: colors.text,
-          background: colors.surfaceAlt,
           whiteSpace: "normal",
         }}
       >
-        {positive}/{rows.length} años con diferencial positivo ({pctPositive}%)
+        <div style={{ fontWeight: 700, color: colors.text }}>
+          {positive}/{rows.length} años con diferencial positivo ({pctPositive}%)
+        </div>
+        {hasAlpha && (
+          <div style={{ marginTop: 4, fontWeight: 700, color: totalAlpha >= 0 ? colors.success : colors.danger }}>
+            Alfa total generado: {totalAlpha >= 0 ? "+" : ""}
+            {pct(totalAlpha)}{" "}
+            <span style={{ fontWeight: 400, color: colors.textMuted }}>
+              (rentabilidad acumulada de todo el período: cuartil superior menos benchmark)
+            </span>
+          </div>
+        )}
       </td>
     </tr>
   );
@@ -672,7 +688,14 @@ function TestResults({ result, onAudit }) {
                   </td>
                 </tr>
               ))}
-              <DiffScoreRow perYear={strategy.perYear} diffKey="diff" colSpan={5} />
+              <DiffScoreRow
+                perYear={strategy.perYear}
+                diffKey="diff"
+                cumulative={strategy.cumulative}
+                strategyCumKey="cumulativeStrategy"
+                benchmarkCumKey="cumulativeBenchmark"
+                colSpan={5}
+              />
             </tbody>
           </table>
         </div>
@@ -724,7 +747,14 @@ function TestResults({ result, onAudit }) {
                     </td>
                   </tr>
                 ))}
-                <DiffScoreRow perYear={strategy.perYear} diffKey="diffVsSp500" colSpan={6} />
+                <DiffScoreRow
+                  perYear={strategy.perYear}
+                  diffKey="diffVsSp500"
+                  cumulative={strategy.cumulative}
+                  strategyCumKey="cumulativeStrategy"
+                  benchmarkCumKey="cumulativeSp500"
+                  colSpan={6}
+                />
               </tbody>
             </table>
           </div>
