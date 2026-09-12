@@ -1,5 +1,6 @@
 package com.martin.fullreval.service;
 
+import com.martin.fullreval.dto.SeasonalityMonteCarloRequest;
 import com.martin.fullreval.dto.SeasonalitySweepRequest;
 import com.martin.fullreval.dto.SeasonalityTestRequest;
 import com.martin.fullreval.service.marketdata.MarketDataSource;
@@ -195,6 +196,125 @@ public class SeasonalityService {
                         "tickers", req.tickers, "comparison", "signal vs. resto del año"),
                 "cells", cells
         );
+    }
+
+    // ------------------------------------------------------------------
+    // Combinatorial optimizer ("Monte Carlo" in the UI, though it's an exhaustive grid
+    // search, not random sampling — every valid window is actually evaluated)
+    // ------------------------------------------------------------------
+
+    /** One (universe, window) combination's top-quartile strategy result, evaluated exactly
+     * like strategyBacktest's "Cuartil superior" series: buy the signal-window top quartile
+     * at the end of the signal window, hold to year-end, repeat every year, compound. score is
+     * CAGR / volatility — a Sharpe-ratio-shaped number (no risk-free rate subtracted) used only
+     * to RANK combinations against each other, not as a standalone risk-adjusted metric. */
+    private record ComboResult(String universe, int startMonth, int lengthMonths, int yearsUsed,
+                                double totalReturn, double cagr, double volatility, double maxDrawdown, double score) {}
+
+    public Map<String, Object> runMonteCarlo(SeasonalityMonteCarloRequest req) {
+        validateYearRange(req.yearFrom, req.yearTo);
+        MarketDataSource source = sourceRegistry.get(req.dataSource);
+        List<Integer> lengths = (req.lengthMonths == null || req.lengthMonths.isEmpty()) ? List.of(1, 2, 3) : req.lengthMonths;
+        List<String> universes = (req.universes == null || req.universes.isEmpty()) ? List.of("SECTOR", "COUNTRY") : req.universes;
+
+        List<ComboResult> results = new ArrayList<>();
+        for (String universe : universes) {
+            boolean isCountry = "COUNTRY".equalsIgnoreCase(universe);
+            List<String> tickers = isCountry ? assetUniverseService.countryTickers() : assetUniverseService.sectorTickers();
+            String currencyMode = isCountry ? req.currencyMode : "USD";
+            Map<String, NavigableMap<LocalDate, BigDecimal>> closesByTicker = fetchAllCloses(source, tickers, currencyMode);
+
+            for (int startMonth = 1; startMonth <= 12; startMonth++) {
+                for (int lengthMonths : lengths) {
+                    if (startMonth + lengthMonths - 1 > 12) continue; // cross-year window — excluded, see class javadoc
+
+                    List<Point> allPoints = new ArrayList<>();
+                    for (String ticker : tickers) {
+                        NavigableMap<LocalDate, BigDecimal> closes = closesByTicker.get(ticker);
+                        for (int year = req.yearFrom; year <= req.yearTo; year++) {
+                            allPoints.add(computePoint(ticker, year, closes, startMonth, lengthMonths));
+                        }
+                    }
+                    Map<Integer, Long> assetCountByYear = allPoints.stream()
+                            .filter(Point::coveredForStats)
+                            .collect(Collectors.groupingBy(Point::year, Collectors.counting()));
+                    List<Point> statsPoints = allPoints.stream()
+                            .filter(Point::coveredForStats)
+                            .filter(p -> assetCountByYear.getOrDefault(p.year(), 0L) >= req.minAssetsPerYear)
+                            .toList();
+
+                    ComboResult combo = evaluateCombo(universe, statsPoints, closesByTicker, startMonth, lengthMonths);
+                    if (combo != null) results.add(combo);
+                }
+            }
+        }
+
+        results.sort(Comparator.comparingDouble(ComboResult::score).reversed());
+        List<Map<String, Object>> combosJson = results.stream().map(this::comboToMap).toList();
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("meta", Map.of("source", source.getDisplayName(), "yearFrom", req.yearFrom, "yearTo", req.yearTo,
+                "universes", universes, "lengthsTested", lengths, "minAssetsPerYear", req.minAssetsPerYear,
+                "combosEvaluated", combosJson.size()));
+        result.put("combos", combosJson);
+        result.put("best", combosJson.isEmpty() ? null : combosJson.get(0));
+        return result;
+    }
+
+    /** Same top-quartile-by-signal, hold-to-year-end logic as strategyBacktest, but reduced to
+     * just the summary numbers a combinatorial search needs (no per-year rows, no benchmark
+     * comparison) — returns null if there isn't enough covered data to say anything. */
+    private ComboResult evaluateCombo(String universeLabel, List<Point> statsPoints,
+                                       Map<String, NavigableMap<LocalDate, BigDecimal>> closesByTicker,
+                                       int startMonth, int lengthMonths) {
+        Map<Integer, List<Point>> byYear = statsPoints.stream()
+                .filter(p -> p.restValue() != null)
+                .collect(Collectors.groupingBy(Point::year));
+
+        List<Integer> years = new ArrayList<>(byYear.keySet());
+        years.sort(Comparator.naturalOrder());
+
+        Map<Integer, List<String>> topQuartileByYear = new LinkedHashMap<>();
+        List<Integer> usableYears = new ArrayList<>();
+        double cumStrategy = 1.0;
+        for (int year : years) {
+            List<Point> yearPoints = byYear.get(year);
+            if (yearPoints.size() < 2) continue; // need at least 2 to have a "top" and a "rest"
+            int quartileSize = (int) Math.ceil(yearPoints.size() / 4.0);
+            List<Point> topQuartile = yearPoints.stream()
+                    .sorted(Comparator.comparingDouble(Point::signalValue).reversed())
+                    .limit(quartileSize)
+                    .toList();
+            double strategyReturn = topQuartile.stream().mapToDouble(Point::restValue).average().orElse(0);
+            cumStrategy *= 1.0 + strategyReturn;
+            topQuartileByYear.put(year, topQuartile.stream().map(Point::ticker).toList());
+            usableYears.add(year);
+        }
+        if (usableYears.size() < 2) return null; // one data point can't show a meaningful risk/return trade-off
+
+        DailySeries daily = buildDailySeries(usableYears, topQuartileByYear::get, closesByTicker, startMonth, lengthMonths);
+        double totalReturn = cumStrategy - 1.0;
+        double cagr = Math.pow(cumStrategy, 1.0 / usableYears.size()) - 1.0;
+        double score = daily.volatility() > 0 ? cagr / daily.volatility() : 0.0;
+        return new ComboResult(universeLabel, startMonth, lengthMonths, usableYears.size(), totalReturn, cagr, daily.volatility(), daily.maxDrawdown(), score);
+    }
+
+    private Map<String, Object> comboToMap(ComboResult c) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("universe", c.universe());
+        m.put("startMonth", c.startMonth());
+        m.put("lengthMonths", c.lengthMonths());
+        m.put("yearsUsed", c.yearsUsed());
+        m.put("totalReturn", c.totalReturn());
+        m.put("cagr", c.cagr());
+        m.put("volatility", c.volatility());
+        m.put("maxDrawdown", c.maxDrawdown());
+        m.put("score", c.score());
+        return m;
+    }
+
+    private void validateYearRange(int yearFrom, int yearTo) {
+        if (yearFrom > yearTo) throw new IllegalArgumentException("yearFrom no puede ser mayor que yearTo");
     }
 
     // ------------------------------------------------------------------

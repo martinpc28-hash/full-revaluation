@@ -17,6 +17,10 @@ const auditableCell = {
 };
 
 const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+const UNIVERSE_LABELS = { SECTOR: "Sectores", COUNTRY: "Países" };
+function windowLabel(startMonth, lengthMonths) {
+  return `${MONTH_NAMES[startMonth - 1]} (${lengthMonths}m)`;
+}
 const CURRENT_YEAR = new Date().getFullYear();
 const DEFAULT_YEAR_FROM = Math.max(2001, CURRENT_YEAR - 20);
 const DEFAULT_YEAR_TO = CURRENT_YEAR - 1;
@@ -48,6 +52,18 @@ export default function SeasonalityTab({ setStatus }) {
   const [testLoading, setTestLoading] = useState(false);
   const [sweepLoading, setSweepLoading] = useState(false);
   const [audit, setAudit] = useState(null);
+
+  // Combinatorial optimizer ("Monte Carlo" per the user's ask) — tries every valid
+  // (universe, signal window) combination and ranks by risk-adjusted return. Always USD:
+  // mixing currencies into one return/volatility ranking across countries and sectors
+  // wouldn't be a fair comparison, same reasoning as the fixed S&P 500/MSCI benchmarks above.
+  const [mcUniverses, setMcUniverses] = useState(new Set(["SECTOR", "COUNTRY"]));
+  const [mcLengths, setMcLengths] = useState(new Set([1, 2, 3]));
+  const [mcYearFrom, setMcYearFrom] = useState(DEFAULT_YEAR_FROM);
+  const [mcYearTo, setMcYearTo] = useState(DEFAULT_YEAR_TO);
+  const [mcMinAssetsPerYear, setMcMinAssetsPerYear] = useState(2);
+  const [mcResult, setMcResult] = useState(null);
+  const [mcLoading, setMcLoading] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -148,6 +164,46 @@ export default function SeasonalityTab({ setStatus }) {
       setStatus({ type: "error", text: `Falló el barrido de ventanas: ${e.message}` });
     } finally {
       setSweepLoading(false);
+    }
+  }
+
+  function toggleInSet(set, setSet, value) {
+    const next = new Set(set);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
+    setSet(next);
+  }
+
+  async function runMonteCarlo() {
+    if (mcUniverses.size === 0) {
+      setStatus({ type: "error", text: "Elegí al menos un universo (sectores y/o países) para el Monte Carlo." });
+      return;
+    }
+    if (mcLengths.size === 0) {
+      setStatus({ type: "error", text: "Elegí al menos una duración de ventana para probar." });
+      return;
+    }
+    if (mcYearFrom > mcYearTo) {
+      setStatus({ type: "error", text: "El año inicial del Monte Carlo no puede ser mayor que el año final." });
+      return;
+    }
+    setMcLoading(true);
+    setStatus(null);
+    try {
+      const result = await api.runSeasonalityMonteCarlo({
+        universes: [...mcUniverses],
+        dataSource,
+        currencyMode: "USD",
+        yearFrom: mcYearFrom,
+        yearTo: mcYearTo,
+        minAssetsPerYear: mcMinAssetsPerYear,
+        lengthMonths: [...mcLengths],
+      });
+      setMcResult(result);
+    } catch (e) {
+      setStatus({ type: "error", text: `Falló el Monte Carlo: ${e.message}` });
+    } finally {
+      setMcLoading(false);
     }
   }
 
@@ -308,6 +364,23 @@ export default function SeasonalityTab({ setStatus }) {
 
       {testResult && <TestResults result={testResult} onAudit={setAudit} />}
       {sweepResult && <SweepResults result={sweepResult} />}
+
+      <MonteCarloSection
+        mcUniverses={mcUniverses}
+        setMcUniverses={setMcUniverses}
+        mcLengths={mcLengths}
+        setMcLengths={setMcLengths}
+        mcYearFrom={mcYearFrom}
+        setMcYearFrom={setMcYearFrom}
+        mcYearTo={mcYearTo}
+        setMcYearTo={setMcYearTo}
+        mcMinAssetsPerYear={mcMinAssetsPerYear}
+        setMcMinAssetsPerYear={setMcMinAssetsPerYear}
+        mcLoading={mcLoading}
+        onRun={runMonteCarlo}
+        mcResult={mcResult}
+        toggleInSet={toggleInSet}
+      />
 
       <AuditPanel audit={audit} onClose={() => setAudit(null)} />
     </div>
@@ -801,6 +874,261 @@ function SweepResults({ result }) {
       <p style={{ ...ui.muted, marginTop: 8 }}>
         Fuente: {meta.source} · {meta.yearFrom}–{meta.yearTo} · {meta.comparison}
       </p>
+    </div>
+  );
+}
+
+function MonteCarloSection({
+  mcUniverses,
+  setMcUniverses,
+  mcLengths,
+  setMcLengths,
+  mcYearFrom,
+  setMcYearFrom,
+  mcYearTo,
+  setMcYearTo,
+  mcMinAssetsPerYear,
+  setMcMinAssetsPerYear,
+  mcLoading,
+  onRun,
+  mcResult,
+  toggleInSet,
+}) {
+  return (
+    <div style={ui.card}>
+      <h2 style={ui.cardTitle}>🎲 Optimización combinatoria (Monte Carlo)</h2>
+      <p style={ui.cardSubtitle}>
+        Prueba TODAS las combinaciones válidas de universo (sectores y/o países — nunca mezclados en una misma
+        cartera) × ventana de señal (mes de inicio × duración), y las ordena por retorno ajustado por riesgo (CAGR ÷
+        volatilidad) para encontrar cuál habría dado, históricamente, más rentabilidad con menos volatilidad. Es un
+        barrido exhaustivo — evalúa cada combinación posible, no una muestra aleatoria — pero lo llamamos "Monte
+        Carlo" siguiendo el pedido. Siempre en USD, para poder comparar sectores y países en una sola tabla.
+      </p>
+
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+        <div style={{ minWidth: 160 }}>
+          <p style={{ fontSize: 13, color: "#374151", margin: "0 0 6px 0", fontWeight: 600 }}>Universo a explorar</p>
+          {["SECTOR", "COUNTRY"].map((u) => (
+            <label key={u} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer", marginBottom: 4 }}>
+              <input type="checkbox" checked={mcUniverses.has(u)} onChange={() => toggleInSet(mcUniverses, setMcUniverses, u)} />
+              {UNIVERSE_LABELS[u]}
+            </label>
+          ))}
+        </div>
+
+        <div style={{ minWidth: 160 }}>
+          <p style={{ fontSize: 13, color: "#374151", margin: "0 0 6px 0", fontWeight: 600 }}>Duración de ventana a probar</p>
+          {[1, 2, 3].map((len) => (
+            <label key={len} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer", marginBottom: 4 }}>
+              <input type="checkbox" checked={mcLengths.has(len)} onChange={() => toggleInSet(mcLengths, setMcLengths, len)} />
+              {len} mes{len > 1 ? "es" : ""}
+            </label>
+          ))}
+        </div>
+
+        <div style={ui.row}>
+          <label style={ui.label}>
+            Años desde
+            <input style={ui.input} type="number" value={mcYearFrom} onChange={(e) => setMcYearFrom(Number(e.target.value))} />
+          </label>
+          <label style={ui.label}>
+            Años hasta
+            <input style={ui.input} type="number" value={mcYearTo} onChange={(e) => setMcYearTo(Number(e.target.value))} />
+          </label>
+          <label style={ui.label}>
+            Mínimo de activos/año
+            <input
+              style={ui.input}
+              type="number"
+              min={2}
+              value={mcMinAssetsPerYear}
+              onChange={(e) => setMcMinAssetsPerYear(Number(e.target.value))}
+            />
+          </label>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <button style={ui.button("primary")} onClick={onRun} disabled={mcLoading}>
+          {mcLoading ? "Corriendo combinaciones…" : "🎲 Correr Monte Carlo"}
+        </button>
+      </div>
+
+      {mcResult && <MonteCarloResults result={mcResult} />}
+    </div>
+  );
+}
+
+function MonteCarloResults({ result }) {
+  const { meta, combos, best } = result;
+
+  if (!combos || combos.length === 0) {
+    return <p style={{ ...ui.muted, marginTop: 16 }}>Ninguna combinación tuvo datos suficientes con esta configuración.</p>;
+  }
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      <p style={ui.muted}>
+        {meta.combosEvaluated} combinaciones evaluadas · {meta.source} · {meta.yearFrom}–{meta.yearTo}
+      </p>
+
+      {best && (
+        <div
+          style={{
+            background: colors.primarySoft,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 10,
+            padding: 16,
+            marginTop: 8,
+            marginBottom: 16,
+          }}
+        >
+          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: colors.primary }}>
+            🏆 Combinación óptima (mayor retorno ajustado por riesgo)
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+            {UNIVERSE_LABELS[best.universe]} · Señal {windowLabel(best.startMonth, best.lengthMonths)}
+          </div>
+          <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginTop: 10, fontSize: 13.5 }}>
+            <span>
+              CAGR: <strong style={{ color: best.cagr >= 0 ? colors.success : colors.danger }}>{pct(best.cagr)}</strong>
+            </span>
+            <span>
+              Retorno total: <strong>{pct(best.totalReturn)}</strong>
+            </span>
+            <span>
+              Volatilidad: <strong>{pct(best.volatility)}</strong>
+            </span>
+            <span>
+              Max drawdown: <strong style={{ color: colors.danger }}>{pct(best.maxDrawdown)}</strong>
+            </span>
+            <span>
+              Años usados: <strong>{best.yearsUsed}</strong>
+            </span>
+          </div>
+        </div>
+      )}
+
+      <ComboScatter combos={combos} best={best} />
+
+      <div style={{ ...ui.tableScroll, marginTop: 16 }}>
+        <table style={ui.table}>
+          <thead>
+            <tr>
+              <th style={ui.th}>Universo</th>
+              <th style={ui.th}>Ventana de señal</th>
+              <th style={ui.th}>CAGR</th>
+              <th style={ui.th}>Retorno total</th>
+              <th style={ui.th}>Volatilidad</th>
+              <th style={ui.th}>Max Drawdown</th>
+              <th style={ui.th}>Score (CAGR/Vol)</th>
+              <th style={ui.th}>Años</th>
+            </tr>
+          </thead>
+          <tbody>
+            {combos.map((c, i) => (
+              <tr key={`${c.universe}-${c.startMonth}-${c.lengthMonths}`} style={i === 0 ? { background: colors.primarySoft } : undefined}>
+                <td style={ui.td}>
+                  {i === 0 ? "🏆 " : ""}
+                  {UNIVERSE_LABELS[c.universe]}
+                </td>
+                <td style={ui.td}>{windowLabel(c.startMonth, c.lengthMonths)}</td>
+                <td style={{ ...ui.td, color: c.cagr >= 0 ? colors.success : colors.danger, fontWeight: 700 }}>{pct(c.cagr)}</td>
+                <td style={ui.td}>{pct(c.totalReturn)}</td>
+                <td style={ui.td}>{pct(c.volatility)}</td>
+                <td style={{ ...ui.td, color: colors.danger }}>{pct(c.maxDrawdown)}</td>
+                <td style={ui.td}>{c.score.toFixed(2)}</td>
+                <td style={ui.td}>{c.yearsUsed}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p style={{ ...ui.muted, marginTop: 8 }}>
+        Score = CAGR ÷ volatilidad anualizada (parecido a un Sharpe ratio, pero sin restar la tasa libre de riesgo) —
+        se usa solo para ORDENAR las combinaciones entre sí, no es una métrica financiera estándar por sí sola. Esto
+        es un backtest histórico: no garantiza que la misma combinación vaya a repetirse en el futuro.
+      </p>
+    </div>
+  );
+}
+
+function ComboScatter({ combos, best }) {
+  const width = 640;
+  const height = 320;
+  const padding = { top: 16, right: 16, bottom: 40, left: 56 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+
+  const xs = combos.map((c) => c.volatility);
+  const ys = combos.map((c) => c.cagr);
+  const xMin = 0;
+  const xMax = Math.max(...xs) * 1.08 || 1;
+  const yMin = Math.min(0, ...ys);
+  const yMax = Math.max(...ys) * 1.08 || 0.01;
+  const xRange = xMax - xMin || 1;
+  const yRange = yMax - yMin || 1;
+
+  const sx = (v) => padding.left + ((v - xMin) / xRange) * plotWidth;
+  const sy = (v) => padding.top + plotHeight - ((v - yMin) / yRange) * plotHeight;
+
+  const zeroY = yMin <= 0 && yMax >= 0 ? sy(0) : null;
+
+  return (
+    <div style={ui.tableScroll}>
+      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto", minWidth: 480 }}>
+        {zeroY !== null && (
+          <line x1={padding.left} y1={zeroY} x2={width - padding.right} y2={zeroY} stroke={colors.border} strokeDasharray="3 3" />
+        )}
+
+        {combos.map((c, i) => {
+          const isBest =
+            best && c.universe === best.universe && c.startMonth === best.startMonth && c.lengthMonths === best.lengthMonths;
+          const color = c.universe === "COUNTRY" ? "#9333ea" : colors.primary;
+          return (
+            <circle
+              key={i}
+              cx={sx(c.volatility)}
+              cy={sy(c.cagr)}
+              r={isBest ? 7 : 3.5}
+              fill={isBest ? colors.success : color}
+              opacity={isBest ? 1 : 0.55}
+              stroke={isBest ? "#fff" : "none"}
+              strokeWidth={isBest ? 2 : 0}
+            >
+              <title>
+                {UNIVERSE_LABELS[c.universe]} · {windowLabel(c.startMonth, c.lengthMonths)}: CAGR {(c.cagr * 100).toFixed(1)}%, vol{" "}
+                {(c.volatility * 100).toFixed(1)}%{isBest ? " — ÓPTIMO" : ""}
+              </title>
+            </circle>
+          );
+        })}
+
+        <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} stroke={colors.text} />
+        <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} stroke={colors.text} />
+        <text x={width / 2} y={height - 6} fontSize="11" fill={colors.textMuted} textAnchor="middle">
+          Volatilidad anualizada
+        </text>
+        <text x={14} y={height / 2} fontSize="11" fill={colors.textMuted} textAnchor="middle" transform={`rotate(-90, 14, ${height / 2})`}>
+          CAGR anualizado
+        </text>
+
+        <g transform={`translate(${width - 150}, ${padding.top})`}>
+          <circle cx={6} cy={4} r={4} fill={colors.primary} />
+          <text x={16} y={8} fontSize="11" fill={colors.textMuted}>
+            Sectores
+          </text>
+          <circle cx={6} cy={20} r={4} fill="#9333ea" />
+          <text x={16} y={24} fontSize="11" fill={colors.textMuted}>
+            Países
+          </text>
+          <circle cx={6} cy={36} r={5} fill={colors.success} stroke="#fff" strokeWidth={1.5} />
+          <text x={16} y={40} fontSize="11" fill={colors.textMuted}>
+            Óptimo
+          </text>
+        </g>
+      </svg>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 package com.martin.fullreval.controller;
 
+import com.martin.fullreval.dto.SeasonalityMonteCarloRequest;
 import com.martin.fullreval.dto.SeasonalitySweepRequest;
 import com.martin.fullreval.dto.SeasonalityTestRequest;
 import com.martin.fullreval.service.AssetUniverseService;
@@ -46,6 +47,13 @@ public class SeasonalityController {
     @PostMapping("/sweep")
     public Map<String, Object> sweep(@RequestBody SeasonalitySweepRequest req) {
         return seasonalityService.runSweep(req);
+    }
+
+    /** Combinatorial optimizer: evaluates every valid (universe, signal window) combination
+     * and ranks them by risk-adjusted return, instead of testing one at a time by hand. */
+    @PostMapping("/montecarlo")
+    public Map<String, Object> montecarlo(@RequestBody SeasonalityMonteCarloRequest req) {
+        return seasonalityService.runMonteCarlo(req);
     }
 
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})

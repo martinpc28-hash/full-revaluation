@@ -51,6 +51,14 @@ public class AssetUniverseService {
         return Map.of("countries", COUNTRIES, "sectors", SECTORS);
     }
 
+    public List<String> sectorTickers() {
+        return SECTORS.stream().map(AssetEntry::ticker).toList();
+    }
+
+    public List<String> countryTickers() {
+        return COUNTRIES.stream().map(AssetEntry::ticker).toList();
+    }
+
     /** USD by default; the preloaded list's currency for a known ticker, else USD. */
     public String currencyOf(String ticker) {
         String t = ticker.trim().toUpperCase();
