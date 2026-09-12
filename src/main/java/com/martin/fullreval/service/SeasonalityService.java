@@ -11,8 +11,10 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.time.LocalDate;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -214,6 +216,10 @@ public class SeasonalityService {
 
     public Map<String, Object> runMonteCarlo(SeasonalityMonteCarloRequest req) {
         validateYearRange(req.yearFrom, req.yearTo);
+        boolean fixedMode = "FIXED".equalsIgnoreCase(req.mode);
+        if (fixedMode && (req.fixedSize == null || req.fixedSize < 2)) {
+            throw new IllegalArgumentException("Para cartera fija, elegí una cantidad de activos fijos >= 2");
+        }
         MarketDataSource source = sourceRegistry.get(req.dataSource);
         List<Integer> lengths = (req.lengthMonths == null || req.lengthMonths.isEmpty()) ? List.of(1, 2, 3) : req.lengthMonths;
         List<String> universes = (req.universes == null || req.universes.isEmpty()) ? List.of("SECTOR", "COUNTRY") : req.universes;
@@ -225,26 +231,33 @@ public class SeasonalityService {
             String currencyMode = isCountry ? req.currencyMode : "USD";
             Map<String, NavigableMap<LocalDate, BigDecimal>> closesByTicker = fetchAllCloses(source, tickers, currencyMode);
 
+            if (fixedMode && req.fixedSize > tickers.size()) continue; // universe too small for this fixed size
+
             for (int startMonth = 1; startMonth <= 12; startMonth++) {
                 for (int lengthMonths : lengths) {
                     if (startMonth + lengthMonths - 1 > 12) continue; // cross-year window — excluded, see class javadoc
 
-                    List<Point> allPoints = new ArrayList<>();
-                    for (String ticker : tickers) {
-                        NavigableMap<LocalDate, BigDecimal> closes = closesByTicker.get(ticker);
-                        for (int year = req.yearFrom; year <= req.yearTo; year++) {
-                            allPoints.add(computePoint(ticker, year, closes, startMonth, lengthMonths));
+                    ComboResult combo;
+                    if (fixedMode) {
+                        combo = bestFixedCombo(universe, tickers, closesByTicker, startMonth, lengthMonths,
+                                req.yearFrom, req.yearTo, req.fixedSize);
+                    } else {
+                        List<Point> allPoints = new ArrayList<>();
+                        for (String ticker : tickers) {
+                            NavigableMap<LocalDate, BigDecimal> closes = closesByTicker.get(ticker);
+                            for (int year = req.yearFrom; year <= req.yearTo; year++) {
+                                allPoints.add(computePoint(ticker, year, closes, startMonth, lengthMonths));
+                            }
                         }
+                        Map<Integer, Long> assetCountByYear = allPoints.stream()
+                                .filter(Point::coveredForStats)
+                                .collect(Collectors.groupingBy(Point::year, Collectors.counting()));
+                        List<Point> statsPoints = allPoints.stream()
+                                .filter(Point::coveredForStats)
+                                .filter(p -> assetCountByYear.getOrDefault(p.year(), 0L) >= req.minAssetsPerYear)
+                                .toList();
+                        combo = evaluateCombo(universe, statsPoints, closesByTicker, startMonth, lengthMonths);
                     }
-                    Map<Integer, Long> assetCountByYear = allPoints.stream()
-                            .filter(Point::coveredForStats)
-                            .collect(Collectors.groupingBy(Point::year, Collectors.counting()));
-                    List<Point> statsPoints = allPoints.stream()
-                            .filter(Point::coveredForStats)
-                            .filter(p -> assetCountByYear.getOrDefault(p.year(), 0L) >= req.minAssetsPerYear)
-                            .toList();
-
-                    ComboResult combo = evaluateCombo(universe, statsPoints, closesByTicker, startMonth, lengthMonths);
                     if (combo != null) results.add(combo);
                 }
             }
@@ -254,12 +267,248 @@ public class SeasonalityService {
         List<Map<String, Object>> combosJson = results.stream().map(this::comboToMap).toList();
 
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("meta", Map.of("source", source.getDisplayName(), "yearFrom", req.yearFrom, "yearTo", req.yearTo,
-                "universes", universes, "lengthsTested", lengths, "minAssetsPerYear", req.minAssetsPerYear,
-                "combosEvaluated", combosJson.size()));
+        Map<String, Object> meta = new LinkedHashMap<>();
+        meta.put("source", source.getDisplayName());
+        meta.put("yearFrom", req.yearFrom);
+        meta.put("yearTo", req.yearTo);
+        meta.put("universes", universes);
+        meta.put("lengthsTested", lengths);
+        meta.put("minAssetsPerYear", req.minAssetsPerYear);
+        meta.put("mode", fixedMode ? "FIXED" : "ROTATING");
+        meta.put("fixedSize", req.fixedSize);
+        meta.put("combosEvaluated", combosJson.size());
+        result.put("meta", meta);
         result.put("combos", combosJson);
         result.put("best", combosJson.isEmpty() ? null : combosJson.get(0));
         return result;
+    }
+
+    /** FIXED mode: searches EVERY possible fixedSize-ticker subset of this universe for this
+     * specific (startMonth, lengthMonths) window and keeps the single best one by score — the
+     * answer to "if I have to commit to N assets and never rotate them, which N give the best
+     * risk-adjusted return for this window?" (as opposed to evaluateCombo's top-quartile-by-
+     * signal, which re-picks the basket every year).
+     *
+     * A ticker's rest-of-year return for this window depends only on (ticker, year) — never on
+     * which subset it happens to be in — so it's computed ONCE per ticker/year here (restCache)
+     * instead of once per subset that contains it (which was C(12,6)=924 subsets × up to 6
+     * memberships each, i.e. redundant by roughly the size of the universe). Building the real
+     * daily wealth curve (buildDailySeries, for volatility+drawdown) genuinely does depend on
+     * the exact subset, so it's still per-subset, but capped to a CAGR-shortlist. */
+    private static final int MAX_FIXED_CANDIDATES_PER_WINDOW = 150;
+
+    private ComboResult bestFixedCombo(String universeLabel, List<String> tickers,
+                                        Map<String, NavigableMap<LocalDate, BigDecimal>> closesByTicker,
+                                        int startMonth, int lengthMonths, int yearFrom, int yearTo, int fixedSize) {
+        List<Integer> years = new ArrayList<>();
+        for (int year = yearFrom; year <= yearTo; year++) years.add(year);
+
+        Map<String, Map<Integer, Double>> restCache = new HashMap<>();
+        for (String ticker : tickers) {
+            Map<Integer, Double> byYear = new HashMap<>();
+            NavigableMap<LocalDate, BigDecimal> closes = closesByTicker.get(ticker);
+            for (int year : years) {
+                Double v = restOnlyValue(closes, year, startMonth, lengthMonths);
+                if (v != null) byYear.put(year, v);
+            }
+            restCache.put(ticker, byYear);
+        }
+
+        record QuickCandidate(List<String> subset, double cagr) {}
+        List<QuickCandidate> quick = new ArrayList<>();
+        for (List<String> subset : combinations(tickers, fixedSize)) {
+            Double cagr = quickCagr(subset, restCache, yearFrom, yearTo);
+            if (cagr != null) quick.add(new QuickCandidate(subset, cagr));
+        }
+        if (quick.isEmpty()) return null;
+        // A combo with mediocre CAGR essentially never ends up with the best risk-adjusted
+        // score among ~11-12 correlated sector/country ETFs, so only the top-CAGR shortlist
+        // gets the expensive full evaluation — evaluated exactly, not sampled, just fewer of them.
+        quick.sort(Comparator.comparingDouble(QuickCandidate::cagr).reversed());
+
+        // Each ticker's daily return series (aligned to one shared reference calendar) is
+        // computed ONCE here and reused by every shortlisted subset below — see
+        // precomputeDailyReturns for why that matters (this used to be the actual bottleneck).
+        Map<String, Map<Integer, double[]>> precomputed = precomputeDailyReturns(tickers, closesByTicker, years, startMonth, lengthMonths);
+
+        ComboResult best = null;
+        int shortlistSize = Math.min(quick.size(), MAX_FIXED_CANDIDATES_PER_WINDOW);
+        for (int i = 0; i < shortlistSize; i++) {
+            ComboResult candidate = evaluateFixedCombo(universeLabel, quick.get(i).subset(), restCache, precomputed, startMonth, lengthMonths, yearFrom, yearTo);
+            if (candidate != null && (best == null || candidate.score() > best.score())) {
+                best = candidate;
+            }
+        }
+        return best;
+    }
+
+    /** Per-ticker daily return series for FIXED mode's subset search, aligned to ONE shared
+     * reference trading calendar per year (this universe's first ticker's calendar — the same
+     * "these ETFs all share essentially the NYSE calendar" approximation portfolioDailyReturns
+     * already makes, just computed once up front instead of re-deriving a date list from a
+     * TreeMap for every single subset). NaN marks a day this ticker has no price for one of the
+     * two dates — skipped when averaging a subset's members, same as portfolioDailyReturns'
+     * count>0 check. This exists because bestFixedCombo evaluates far more baskets than
+     * buildDailySeries's normal TreeMap-lookups-per-basket approach can afford. */
+    private Map<String, Map<Integer, double[]>> precomputeDailyReturns(List<String> tickers,
+            Map<String, NavigableMap<LocalDate, BigDecimal>> closesByTicker, List<Integer> years,
+            int startMonth, int lengthMonths) {
+        NavigableMap<LocalDate, BigDecimal> reference = closesByTicker.get(tickers.get(0));
+        Map<Integer, List<LocalDate>> datesByYear = new HashMap<>();
+        for (int year : years) {
+            LocalDate windowStart = LocalDate.of(year, startMonth, 1);
+            LocalDate windowEnd = windowStart.plusMonths(lengthMonths).minusDays(1);
+            LocalDate holdStart = windowEnd.plusDays(1);
+            LocalDate holdEnd = LocalDate.of(year, 12, 31);
+            datesByYear.put(year, (reference == null || reference.isEmpty() || !holdStart.isBefore(holdEnd))
+                    ? List.of()
+                    : new ArrayList<>(reference.subMap(holdStart, true, holdEnd, true).keySet()));
+        }
+
+        Map<String, Map<Integer, double[]>> result = new HashMap<>();
+        for (String ticker : tickers) {
+            NavigableMap<LocalDate, BigDecimal> closes = closesByTicker.get(ticker);
+            Map<Integer, double[]> byYear = new HashMap<>();
+            for (int year : years) {
+                List<LocalDate> dates = datesByYear.get(year);
+                double[] returns = new double[Math.max(0, dates.size() - 1)];
+                for (int i = 1; i < dates.size(); i++) {
+                    BigDecimal p0 = closes == null ? null : closes.get(dates.get(i - 1));
+                    BigDecimal p1 = closes == null ? null : closes.get(dates.get(i));
+                    returns[i - 1] = (p0 == null || p1 == null || p0.signum() == 0)
+                            ? Double.NaN
+                            : p1.subtract(p0).divide(p0, MathContext.DECIMAL64).doubleValue();
+                }
+                byYear.put(year, returns);
+            }
+            result.put(ticker, byYear);
+        }
+        return result;
+    }
+
+    /** Same wealth-curve mechanics as buildDailySeries (compounds daily returns, tracks
+     * peak-to-trough drawdown), but reads from precomputeDailyReturns' arrays instead of
+     * re-walking closesByTicker's TreeMaps — pure array arithmetic, safe to call once per
+     * shortlisted subset. */
+    private DailySeries buildDailySeriesFromPrecomputed(List<Integer> years, List<String> basket,
+                                                         Map<String, Map<Integer, double[]>> precomputed) {
+        List<Double> allDailyReturns = new ArrayList<>();
+        double wealth = 1.0;
+        double peak = 1.0;
+        double maxDrawdown = 0.0;
+        Map<Integer, Double> maxDrawdownByYear = new LinkedHashMap<>();
+
+        for (int year : years) {
+            double[][] memberReturns = new double[basket.size()][];
+            for (int m = 0; m < basket.size(); m++) {
+                memberReturns[m] = precomputed.get(basket.get(m)).get(year);
+            }
+            int dayCount = memberReturns.length == 0 ? 0 : memberReturns[0].length;
+            for (int d = 0; d < dayCount; d++) {
+                double sum = 0;
+                int count = 0;
+                for (double[] arr : memberReturns) {
+                    double v = arr[d];
+                    if (!Double.isNaN(v)) { sum += v; count++; }
+                }
+                if (count > 0) {
+                    double r = sum / count;
+                    allDailyReturns.add(r);
+                    wealth *= 1.0 + r;
+                    peak = Math.max(peak, wealth);
+                    maxDrawdown = Math.min(maxDrawdown, (wealth - peak) / peak);
+                }
+            }
+            maxDrawdownByYear.put(year, maxDrawdown);
+        }
+        return new DailySeries(annualizedVolFromDaily(allDailyReturns), maxDrawdown, maxDrawdownByYear);
+    }
+
+    /** Just the rest-of-year ReturnCalc's value — skips computing the signal-window and
+     * full-year ReturnCalc that computePoint/Point always build alongside it, which FIXED mode
+     * never uses (there's no signal-based ranking when the basket never changes). */
+    private Double restOnlyValue(NavigableMap<LocalDate, BigDecimal> closes, int year, int startMonth, int lengthMonths) {
+        LocalDate windowStart = LocalDate.of(year, startMonth, 1);
+        LocalDate windowEnd = windowStart.plusMonths(lengthMonths).minusDays(1);
+        LocalDate yearEnd = LocalDate.of(year, 12, 31);
+        if (!windowEnd.isBefore(yearEnd)) return null;
+        return computeReturnCalc(closes, windowEnd.plusDays(1), yearEnd).value();
+    }
+
+    /** Cheap first pass for bestFixedCombo's shortlist: just the compounded CAGR of holding this
+     * fixed basket every year, skipping buildDailySeries entirely. Null if fewer than 2 years
+     * have data for every member of the basket. */
+    private Double quickCagr(List<String> subset, Map<String, Map<Integer, Double>> restCache, int yearFrom, int yearTo) {
+        double cumStrategy = 1.0;
+        int usableYears = 0;
+        for (int year = yearFrom; year <= yearTo; year++) {
+            List<Double> memberReturns = new ArrayList<>(subset.size());
+            boolean allCovered = true;
+            for (String ticker : subset) {
+                Double v = restCache.get(ticker).get(year);
+                if (v == null) { allCovered = false; break; }
+                memberReturns.add(v);
+            }
+            if (!allCovered) continue;
+            cumStrategy *= 1.0 + memberReturns.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+            usableYears++;
+        }
+        if (usableYears < 2) return null;
+        return Math.pow(cumStrategy, 1.0 / usableYears) - 1.0;
+    }
+
+    /** Same buy-at-end-of-signal-window, hold-to-year-end mechanics as evaluateCombo, but with
+     * a FIXED basket held identically every year — no re-ranking by that year's signal return.
+     * A year only counts if EVERY member of the fixed basket has data for it — a fixed N-asset
+     * portfolio isn't well-defined for a year where one of its members didn't exist yet. */
+    private ComboResult evaluateFixedCombo(String universeLabel, List<String> subset, Map<String, Map<Integer, Double>> restCache,
+                                            Map<String, Map<Integer, double[]>> precomputed,
+                                            int startMonth, int lengthMonths, int yearFrom, int yearTo) {
+        Map<Integer, List<String>> basketByYear = new LinkedHashMap<>();
+        List<Integer> usableYears = new ArrayList<>();
+        double cumStrategy = 1.0;
+        for (int year = yearFrom; year <= yearTo; year++) {
+            List<Double> memberReturns = new ArrayList<>();
+            boolean allCovered = true;
+            for (String ticker : subset) {
+                Double v = restCache.get(ticker).get(year);
+                if (v == null) { allCovered = false; break; }
+                memberReturns.add(v);
+            }
+            if (!allCovered) continue;
+            double yearReturn = memberReturns.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+            cumStrategy *= 1.0 + yearReturn;
+            basketByYear.put(year, subset);
+            usableYears.add(year);
+        }
+        if (usableYears.size() < 2) return null; // one data point can't show a meaningful risk/return trade-off
+
+        DailySeries daily = buildDailySeriesFromPrecomputed(usableYears, subset, precomputed);
+        double totalReturn = cumStrategy - 1.0;
+        double cagr = Math.pow(cumStrategy, 1.0 / usableYears.size()) - 1.0;
+        double score = daily.volatility() > 0 ? cagr / daily.volatility() : 0.0;
+        return new ComboResult(universeLabel, startMonth, lengthMonths, usableYears.size(), totalReturn, cagr,
+                daily.volatility(), daily.maxDrawdown(), score, basketByYear);
+    }
+
+    /** All k-element subsets of items, order-independent (combinations, not permutations). */
+    private List<List<String>> combinations(List<String> items, int k) {
+        List<List<String>> result = new ArrayList<>();
+        if (k <= 0 || k > items.size()) return result;
+        combinationsHelper(items, k, 0, new ArrayDeque<>(), result);
+        return result;
+    }
+
+    private void combinationsHelper(List<String> items, int k, int start, Deque<String> current, List<List<String>> result) {
+        if (current.size() == k) {
+            result.add(new ArrayList<>(current));
+            return;
+        }
+        for (int i = start; i < items.size(); i++) {
+            current.addLast(items.get(i));
+            combinationsHelper(items, k, i + 1, current, result);
+            current.removeLast();
+        }
     }
 
     /** Same top-quartile-by-signal, hold-to-year-end logic as strategyBacktest, but reduced to

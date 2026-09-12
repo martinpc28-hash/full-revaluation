@@ -68,6 +68,11 @@ export default function SeasonalityTab({ setStatus }) {
   const [mcYearFrom, setMcYearFrom] = useState(DEFAULT_YEAR_FROM);
   const [mcYearTo, setMcYearTo] = useState(DEFAULT_YEAR_TO);
   const [mcMinAssetsPerYear, setMcMinAssetsPerYear] = useState(2);
+  // "ROTATING" (default) re-picks the top quartile every year, like the strategy above.
+  // "FIXED" commits to the same mcFixedSize tickers for the whole period — searches every
+  // possible subset of that size and keeps the best, instead of letting the basket rotate.
+  const [mcMode, setMcMode] = useState("ROTATING");
+  const [mcFixedSize, setMcFixedSize] = useState(3);
   const [mcResult, setMcResult] = useState(null);
   const [mcLoading, setMcLoading] = useState(false);
 
@@ -193,6 +198,10 @@ export default function SeasonalityTab({ setStatus }) {
       setStatus({ type: "error", text: "El año inicial del Monte Carlo no puede ser mayor que el año final." });
       return;
     }
+    if (mcMode === "FIXED" && (!mcFixedSize || mcFixedSize < 2)) {
+      setStatus({ type: "error", text: "Para cartera fija, elegí una cantidad de activos fijos de al menos 2." });
+      return;
+    }
     setMcLoading(true);
     setStatus(null);
     try {
@@ -204,6 +213,8 @@ export default function SeasonalityTab({ setStatus }) {
         yearTo: mcYearTo,
         minAssetsPerYear: mcMinAssetsPerYear,
         lengthMonths: [...mcLengths],
+        mode: mcMode,
+        fixedSize: mcMode === "FIXED" ? mcFixedSize : undefined,
       });
       setMcResult(result);
     } catch (e) {
@@ -382,6 +393,10 @@ export default function SeasonalityTab({ setStatus }) {
         setMcYearTo={setMcYearTo}
         mcMinAssetsPerYear={mcMinAssetsPerYear}
         setMcMinAssetsPerYear={setMcMinAssetsPerYear}
+        mcMode={mcMode}
+        setMcMode={setMcMode}
+        mcFixedSize={mcFixedSize}
+        setMcFixedSize={setMcFixedSize}
         mcLoading={mcLoading}
         onRun={runMonteCarlo}
         mcResult={mcResult}
@@ -895,11 +910,16 @@ function MonteCarloSection({
   setMcYearTo,
   mcMinAssetsPerYear,
   setMcMinAssetsPerYear,
+  mcMode,
+  setMcMode,
+  mcFixedSize,
+  setMcFixedSize,
   mcLoading,
   onRun,
   mcResult,
   toggleInSet,
 }) {
+  const isFixed = mcMode === "FIXED";
   return (
     <div style={ui.card}>
       <h2 style={ui.cardTitle}>🎲 Optimización combinatoria (Monte Carlo)</h2>
@@ -910,6 +930,33 @@ function MonteCarloSection({
         barrido exhaustivo — evalúa cada combinación posible, no una muestra aleatoria — pero lo llamamos "Monte
         Carlo" siguiendo el pedido. Siempre en USD, para poder comparar sectores y países en una sola tabla.
       </p>
+
+      <div style={{ marginBottom: 16 }}>
+        <p style={{ fontSize: 13, color: "#374151", margin: "0 0 6px 0", fontWeight: 600 }}>Modo de selección de activos</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, cursor: "pointer" }}>
+            <input type="radio" name="mcMode" checked={!isFixed} onChange={() => setMcMode("ROTATING")} style={{ marginTop: 2 }} />
+            <span>
+              <strong>Rotar cuartil superior cada año</strong>
+              <br />
+              <span style={{ color: colors.textMuted }}>
+                Re-elige el cuartil superior por señal todos los años (como la estrategia principal de arriba).
+              </span>
+            </span>
+          </label>
+          <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, cursor: "pointer" }}>
+            <input type="radio" name="mcMode" checked={isFixed} onChange={() => setMcMode("FIXED")} style={{ marginTop: 2 }} />
+            <span>
+              <strong>Cartera fija (sin rotación)</strong>
+              <br />
+              <span style={{ color: colors.textMuted }}>
+                Elegí cuántos activos (3, 4, 5, 6…) y busca, entre TODAS las combinaciones posibles de esa cantidad,
+                la que mejor resultado dio manteniendo siempre los mismos activos todo el período.
+              </span>
+            </span>
+          </label>
+        </div>
+      </div>
 
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
         <div style={{ minWidth: 160 }}>
@@ -941,18 +988,41 @@ function MonteCarloSection({
             Años hasta
             <input style={ui.input} type="number" value={mcYearTo} onChange={(e) => setMcYearTo(Number(e.target.value))} />
           </label>
-          <label style={ui.label}>
-            Mínimo de activos/año
-            <input
-              style={ui.input}
-              type="number"
-              min={2}
-              value={mcMinAssetsPerYear}
-              onChange={(e) => setMcMinAssetsPerYear(Number(e.target.value))}
-            />
-          </label>
+          {isFixed ? (
+            <label style={ui.label}>
+              N° de activos fijos
+              <input
+                style={ui.input}
+                type="number"
+                min={2}
+                value={mcFixedSize}
+                onChange={(e) => setMcFixedSize(Number(e.target.value))}
+              />
+            </label>
+          ) : (
+            <label style={ui.label}>
+              Mínimo de activos/año
+              <input
+                style={ui.input}
+                type="number"
+                min={2}
+                value={mcMinAssetsPerYear}
+                onChange={(e) => setMcMinAssetsPerYear(Number(e.target.value))}
+              />
+            </label>
+          )}
         </div>
       </div>
+      {isFixed && (
+        <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+          <span style={{ ...ui.muted, marginRight: 4 }}>Atajos:</span>
+          {[3, 4, 5, 6].map((n) => (
+            <button key={n} style={ui.button(mcFixedSize === n ? "primary" : "secondary")} onClick={() => setMcFixedSize(n)}>
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div style={{ marginTop: 16 }}>
         <button style={ui.button("primary")} onClick={onRun} disabled={mcLoading}>
@@ -965,9 +1035,18 @@ function MonteCarloSection({
   );
 }
 
+// picksByYear is identical every year in FIXED mode (same basket held throughout) but rotates
+// year to year in ROTATING mode — these two helpers read that without the caller needing to
+// know which mode produced the data.
+function fixedTickersOf(picksByYear) {
+  const years = Object.keys(picksByYear || {});
+  return years.length ? picksByYear[years[0]] : null;
+}
+
 function MonteCarloResults({ result }) {
   const { meta, combos, best } = result;
   const [picksDetail, setPicksDetail] = useState(null);
+  const isFixed = meta.mode === "FIXED";
 
   if (!combos || combos.length === 0) {
     return <p style={{ ...ui.muted, marginTop: 16 }}>Ninguna combinación tuvo datos suficientes con esta configuración.</p>;
@@ -977,12 +1056,13 @@ function MonteCarloResults({ result }) {
     <div style={{ marginTop: 20 }}>
       <p style={ui.muted}>
         {meta.combosEvaluated} combinaciones evaluadas · {meta.source} · {meta.yearFrom}–{meta.yearTo}
+        {isFixed && ` · Cartera fija de ${meta.fixedSize} activos`}
       </p>
 
       {best && (
         <div
           onClick={() => setPicksDetail(best)}
-          title="Click para ver qué activos eligió esta combinación cada año"
+          title={isFixed ? "Click para confirmar los activos elegidos" : "Click para ver qué activos eligió esta combinación cada año"}
           style={{
             background: colors.primarySoft,
             border: `1px solid ${colors.border}`,
@@ -999,6 +1079,12 @@ function MonteCarloResults({ result }) {
           <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
             {UNIVERSE_LABELS[best.universe]} · Señal {windowLabel(best.startMonth, best.lengthMonths)}
           </div>
+          {isFixed && (
+            <div style={{ marginTop: 8, fontSize: 14 }}>
+              Activos: <strong>{(fixedTickersOf(best.picksByYear) || []).join(", ")}</strong>{" "}
+              <span style={{ color: colors.textMuted, fontWeight: 400 }}>(los mismos todo el período, sin rotar)</span>
+            </div>
+          )}
           <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginTop: 10, fontSize: 13.5 }}>
             <span>
               CAGR: <strong style={{ color: best.cagr >= 0 ? colors.success : colors.danger }}>{pct(best.cagr)}</strong>
@@ -1017,7 +1103,7 @@ function MonteCarloResults({ result }) {
             </span>
           </div>
           <div style={{ marginTop: 10, fontSize: 12, color: colors.primary, fontWeight: 600 }}>
-            👆 Click para ver qué activos eligió cada año
+            👆 {isFixed ? "Click para confirmar los activos elegidos" : "Click para ver qué activos eligió cada año"}
           </div>
         </div>
       )}
@@ -1053,13 +1139,23 @@ function MonteCarloResults({ result }) {
                 <td style={{ ...ui.td, color: colors.danger }}>{pct(c.maxDrawdown)}</td>
                 <td style={ui.td}>{c.score.toFixed(2)}</td>
                 <td style={ui.td}>{c.yearsUsed}</td>
-                <td style={ui.td}>
-                  <button
-                    style={{ ...ui.button("ghost"), height: "auto", padding: "2px 8px", fontSize: 12.5, color: colors.primary }}
-                    onClick={() => setPicksDetail(c)}
-                  >
-                    Ver ▸
-                  </button>
+                <td style={{ ...ui.td, whiteSpace: isFixed ? "normal" : "nowrap" }}>
+                  {isFixed ? (
+                    <span
+                      style={{ ...auditableCell, color: colors.text }}
+                      title="Click para confirmar los activos elegidos"
+                      onClick={() => setPicksDetail(c)}
+                    >
+                      {(fixedTickersOf(c.picksByYear) || []).join(", ")}
+                    </span>
+                  ) : (
+                    <button
+                      style={{ ...ui.button("ghost"), height: "auto", padding: "2px 8px", fontSize: 12.5, color: colors.primary }}
+                      onClick={() => setPicksDetail(c)}
+                    >
+                      Ver ▸
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -1083,15 +1179,39 @@ function ComboPicksDrawer({ detail, onClose }) {
     .map(Number)
     .sort((a, b) => a - b);
 
+  // FIXED mode holds the exact same basket every year — detect that and show one consolidated
+  // line instead of repeating an identical row per year, which would just look redundant.
+  const signature = (list) => [...(list || [])].sort().join(",");
+  const isConstant = years.length > 0 && years.every((y) => signature(detail.picksByYear[y]) === signature(detail.picksByYear[years[0]]));
+
   return (
     <Drawer
       kicker="📋 Composición de la cartera"
       title={`${UNIVERSE_LABELS[detail.universe]} · Señal ${windowLabel(detail.startMonth, detail.lengthMonths)}`}
-      subtitle="Activos del cuartil superior por señal que esta combinación eligió cada año — comprados al empezar el mes de 'cartera desde', mantenidos hasta el 31 de diciembre."
+      subtitle={
+        isConstant
+          ? "Cartera fija: los mismos activos todos los años, comprados al empezar el mes de 'cartera desde' y mantenidos hasta el 31 de diciembre."
+          : "Activos del cuartil superior por señal que esta combinación eligió cada año — comprados al empezar el mes de 'cartera desde', mantenidos hasta el 31 de diciembre."
+      }
       onClose={onClose}
     >
       {years.length === 0 ? (
         <p style={ui.muted}>No hay datos de composición para esta combinación.</p>
+      ) : isConstant ? (
+        <div
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: 10,
+            padding: 14,
+            background: colors.surfaceAlt,
+            fontSize: 14,
+          }}
+        >
+          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: colors.textMuted, marginBottom: 6 }}>
+            Todos los años ({years[0]}–{years[years.length - 1]})
+          </div>
+          <strong>{(detail.picksByYear[years[0]] || []).join(", ")}</strong>
+        </div>
       ) : (
         <div style={ui.tableScroll}>
           <table style={ui.table}>
