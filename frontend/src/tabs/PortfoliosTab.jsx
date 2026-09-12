@@ -178,7 +178,7 @@ export default function PortfoliosTab({
   return (
     <div>
       <div style={ui.card}>
-        <h2 style={ui.cardTitle}>💼 Tus carteras</h2>
+        <h2 style={ui.cardTitle}>Tus carteras</h2>
         <p style={ui.cardSubtitle}>Crea varias carteras para comparar distintos libros o estrategias.</p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
           {portfolios.map((p) => (
@@ -207,7 +207,7 @@ export default function PortfoliosTab({
             />
           </label>
           <button style={ui.button("secondary")} onClick={createPortfolio}>
-            ➕ Crear cartera
+            Crear cartera
           </button>
           {portfolios.length > 1 && (
             <button
@@ -215,7 +215,7 @@ export default function PortfoliosTab({
               onClick={() => onDeletePortfolio(currentPortfolioId)}
               title="Elimina esta cartera de la lista (los instrumentos quedan huérfanos en el servidor, no se borran)"
             >
-              🗑️ Quitar cartera actual
+              Quitar cartera actual
             </button>
           )}
         </div>
@@ -444,7 +444,7 @@ export default function PortfoliosTab({
                           onClick={() => deleteInstrument(ins.id)}
                           title="Eliminar instrumento"
                         >
-                          🗑️
+                          Eliminar
                         </button>
                       </td>
                     </tr>

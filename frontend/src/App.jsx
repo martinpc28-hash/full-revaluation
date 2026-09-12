@@ -31,10 +31,10 @@ function loadCurrentId(portfolios) {
 }
 
 const TABS = [
-  { key: "dashboard", label: "Gráficos y métricas", icon: "📊" },
-  { key: "portfolios", label: "Carteras", icon: "💼" },
-  { key: "scenarios", label: "Escenarios de estrés", icon: "⚙️" },
-  { key: "seasonality", label: "Estacionalidad", icon: "🔬" },
+  { key: "dashboard", label: "Gráficos y métricas" },
+  { key: "portfolios", label: "Carteras" },
+  { key: "scenarios", label: "Escenarios de estrés" },
+  { key: "seasonality", label: "Estacionalidad" },
 ];
 
 export default function App() {
@@ -105,7 +105,6 @@ export default function App() {
     <div style={shell.app}>
       <header style={shell.header}>
         <div style={shell.brand}>
-          <span style={{ fontSize: 24 }}>📐</span>
           <div>
             <p style={shell.brandTitle}>Full Revaluation</p>
             <p style={shell.brandSubtitle}>Riesgo de mercado por revaluación completa — VaR y escenarios de estrés</p>
@@ -130,7 +129,6 @@ export default function App() {
       <nav style={shell.tabBar}>
         {TABS.map((t) => (
           <button key={t.key} style={shell.tabButton(activeTab === t.key)} onClick={() => setActiveTab(t.key)}>
-            <span>{t.icon}</span>
             {t.label}
           </button>
         ))}

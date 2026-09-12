@@ -58,7 +58,7 @@ export default function ScatterChart({ points, rho, pValue, n, xLabel, yLabel })
       </text>
 
       {/* Annotation */}
-      <rect x={width - 148} y={padding.top} width={136} height={44} fill="#fff" opacity={0.85} stroke={colors.border} rx={4} />
+      <rect x={width - 148} y={padding.top} width={136} height={44} fill={colors.surface} opacity={0.92} stroke={colors.border} rx={4} />
       <text x={width - 140} y={padding.top + 16} fontSize="11.5" fontWeight="700" fill={colors.text}>
         ρ = {rhoText}
       </text>

@@ -3,21 +3,21 @@
 // of three separate forms glued together.
 
 export const colors = {
-  bg: "#f3f5f9",
-  surface: "#ffffff",
-  surfaceAlt: "#f8f9fd",
-  border: "#e2e5ee",
-  text: "#1a1f2b",
-  textMuted: "#6b7280",
-  primary: "#2f6fed",
-  primaryDark: "#1f4fc4",
-  primarySoft: "#eaf0ff",
-  danger: "#d6483f",
-  dangerSoft: "#fdecea",
-  success: "#1f9d55",
-  successSoft: "#eaf7ec",
-  warning: "#c9791a",
-  warningSoft: "#fdf3e3",
+  bg: "#0b0d12",
+  surface: "#12151c",
+  surfaceAlt: "#1a1e28",
+  border: "#2a2f3d",
+  text: "#e8eaf0",
+  textMuted: "#9aa1b0",
+  primary: "#5b8def",
+  primaryDark: "#82aaf5",
+  primarySoft: "#1b2740",
+  danger: "#f2685c",
+  dangerSoft: "#3a1f1d",
+  success: "#3ecf7e",
+  successSoft: "#173625",
+  warning: "#e2a13d",
+  warningSoft: "#3a2c14",
 };
 
 export const shell = {
@@ -82,7 +82,7 @@ export const ui = {
   cardSubtitle: { margin: "0 0 16px 0", fontSize: 13, color: colors.textMuted },
   form: { display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" },
   row: { display: "flex", flexWrap: "wrap", gap: 12 },
-  label: { display: "flex", flexDirection: "column", fontSize: 13, color: "#374151", minWidth: 140, gap: 4 },
+  label: { display: "flex", flexDirection: "column", fontSize: 13, color: colors.textMuted, minWidth: 140, gap: 4 },
   input: {
     padding: "8px 10px",
     border: `1px solid ${colors.border}`,
@@ -127,7 +127,7 @@ export const ui = {
   muted: { color: colors.textMuted, fontSize: 13 },
   badge: (tone = "neutral") => {
     const tones = {
-      neutral: { bg: "#eef0f5", fg: "#4b5563" },
+      neutral: { bg: colors.surfaceAlt, fg: colors.textMuted },
       primary: { bg: colors.primarySoft, fg: colors.primaryDark },
       success: { bg: colors.successSoft, fg: colors.success },
       danger: { bg: colors.dangerSoft, fg: colors.danger },
@@ -149,7 +149,7 @@ export const ui = {
   bannerError: {
     background: colors.dangerSoft,
     color: colors.danger,
-    border: `1px solid #f5c2bf`,
+    border: `1px solid #5c2c28`,
     borderRadius: 8,
     padding: "10px 14px",
     marginBottom: 16,
@@ -158,7 +158,7 @@ export const ui = {
   bannerSuccess: {
     background: colors.successSoft,
     color: colors.success,
-    border: `1px solid #c3e8c8`,
+    border: `1px solid #1f4a30`,
     borderRadius: 8,
     padding: "10px 14px",
     marginBottom: 16,

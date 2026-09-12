@@ -9,7 +9,7 @@ import { ui, colors } from "../theme.js";
 // to any specific historical episode.
 const PRESETS = {
   oil: {
-    label: "🛢️ Shock energético — petróleo +100 USD/barril",
+    label: "Shock energético — petróleo +100 USD/barril",
     help: "Encarece insumos e inflación: tasas suben, renta variable cae, vol sube, divisas se debilitan vs. USD.",
     rateShockBp: 75,
     spotShockPct: -0.12,
@@ -17,7 +17,7 @@ const PRESETS = {
     fxShockPct: -0.03,
   },
   recession: {
-    label: "📉 Economía en recesión mundial",
+    label: "Economía en recesión mundial",
     help: "Bancos centrales bajan tasas agresivamente, ventas masivas en renta variable, vol dispara, flight-to-USD.",
     rateShockBp: -150,
     spotShockPct: -0.25,
@@ -161,7 +161,7 @@ export default function ScenariosTab({ portfolioId, setStatus, onRunComplete }) 
   return (
     <div>
       <div style={ui.card}>
-        <h2 style={ui.cardTitle}>🎲 Escenarios para VaR</h2>
+        <h2 style={ui.cardTitle}>Escenarios para VaR</h2>
         <p style={ui.cardSubtitle}>
           Genera N escenarios y corre la revaluación completa para obtener el VaR de la cartera. Dos fuentes
           posibles — usa la real siempre que puedas.
@@ -197,7 +197,7 @@ export default function ScenariosTab({ portfolioId, setStatus, onRunComplete }) 
               background: colors.successSoft,
             }}
           >
-            <div style={{ fontWeight: 700, fontSize: 13.5 }}>✅ Datos reales (recomendado)</div>
+            <div style={{ fontWeight: 700, fontSize: 13.5 }}>Datos reales (recomendado)</div>
             <div style={{ fontSize: 12.5, color: colors.textMuted, margin: "4px 0 10px" }}>
               Movimientos diarios reales: tasa del Tesoro a 10 años, S&amp;P 500, VIX y USD/EUR — vía FRED (Reserva
               Federal), gratis, sin API key.
@@ -216,7 +216,7 @@ export default function ScenariosTab({ portfolioId, setStatus, onRunComplete }) 
               background: colors.surfaceAlt,
             }}
           >
-            <div style={{ fontWeight: 700, fontSize: 13.5 }}>⚠️ Sintético (respaldo)</div>
+            <div style={{ fontWeight: 700, fontSize: 13.5 }}>Sintético (respaldo)</div>
             <div style={{ fontSize: 12.5, color: colors.textMuted, margin: "4px 0 10px" }}>
               Ruido aleatorio inventado — no son datos de mercado reales. Solo útil si no hay internet o quieres una
               prueba rápida.
@@ -232,18 +232,18 @@ export default function ScenariosTab({ portfolioId, setStatus, onRunComplete }) 
           onClick={runMonteCarlo}
           disabled={mcLoading || !mcGenerated}
         >
-          {mcLoading ? "Corriendo…" : "🚀 2. Correr modelo VaR"}
+          {mcLoading ? "Corriendo…" : "2. Correr modelo VaR"}
         </button>
         {!mcGenerated && <p style={{ ...ui.muted, marginTop: 8 }}>Genera los escenarios primero para poder correr.</p>}
         {mcGenerated && (
           <p style={{ ...ui.muted, marginTop: 8 }}>
-            Fuente activa: {mcSource === "real" ? "✅ datos reales (FRED)" : "⚠️ sintético (aleatorio)"}
+            Fuente activa: {mcSource === "real" ? "datos reales (FRED)" : "sintético (aleatorio)"}
           </p>
         )}
       </div>
 
       <div style={ui.card}>
-        <h2 style={ui.cardTitle}>⚡ Variables macro / escenario de estrés</h2>
+        <h2 style={ui.cardTitle}>Variables macro / escenario de estrés</h2>
         <p style={ui.cardSubtitle}>
           Define un shock determinístico (no aleatorio) y corre la revaluación completa bajo ese único escenario —
           útil para responder "¿cuánto perdemos si pasa X?".
@@ -320,7 +320,7 @@ export default function ScenariosTab({ portfolioId, setStatus, onRunComplete }) 
           onClick={runStressTest}
           disabled={stressLoading}
         >
-          {stressLoading ? "Corriendo…" : "🚀 Correr modelo de estrés"}
+          {stressLoading ? "Corriendo…" : "Correr modelo de estrés"}
         </button>
       </div>
     </div>

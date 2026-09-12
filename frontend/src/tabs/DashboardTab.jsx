@@ -7,12 +7,11 @@ export default function DashboardTab({ lastRun, portfolioName, onGoToScenarios }
     return (
       <div style={ui.card}>
         <div style={ui.emptyState}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>📊</div>
           <p style={{ margin: "0 0 12px 0" }}>
             Todavía no has corrido ningún modelo para <strong>{portfolioName}</strong>.
           </p>
           <button style={ui.button("primary")} onClick={onGoToScenarios}>
-            ⚙️ Ir a Escenarios
+            Ir a Escenarios
           </button>
         </div>
       </div>
@@ -25,7 +24,7 @@ export default function DashboardTab({ lastRun, portfolioName, onGoToScenarios }
       <div>
         <div style={ui.card}>
           <span style={ui.badge(lastRun.source === "real" ? "success" : "warning")}>
-            {lastRun.source === "real" ? "✅ Datos reales (FRED)" : "⚠️ Sintético (aleatorio)"}
+            {lastRun.source === "real" ? "Datos reales (FRED)" : "Sintético (aleatorio)"}
           </span>
           <h2 style={{ ...ui.cardTitle, marginTop: 8 }}>{lastRun.label}</h2>
           {lastRun.source !== "real" && (

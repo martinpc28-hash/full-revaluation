@@ -1,3 +1,5 @@
+import { colors } from "./theme.js";
+
 // Generic heatmap/grid: row labels x column labels, one colored+labeled cell
 // per pair. Used for the coverage strip, the year x asset ranking heatmap,
 // and the window-sweep matrix — each just supplies differently-colored cells.
@@ -17,7 +19,7 @@ export default function HeatmapGrid({ rowLabels, colLabels, cells, rowLabelWidth
                 minWidth: cellWidth,
                 padding: "2px 4px",
                 fontWeight: 600,
-                color: "#6b7280",
+                color: colors.textMuted,
                 whiteSpace: "nowrap",
               }}
             >
@@ -43,7 +45,7 @@ export default function HeatmapGrid({ rowLabels, colLabels, cells, rowLabelWidth
               {row}
             </td>
             {colLabels.map((_, cIdx) => {
-              const cell = cells[rIdx]?.[cIdx] ?? { label: "", color: "#f3f4f6" };
+              const cell = cells[rIdx]?.[cIdx] ?? { label: "", color: colors.surfaceAlt };
               return (
                 <td
                   key={cIdx}
@@ -55,8 +57,8 @@ export default function HeatmapGrid({ rowLabels, colLabels, cells, rowLabelWidth
                     minWidth: cellWidth,
                     textAlign: "center",
                     background: cell.color,
-                    color: cell.textColor || "#1a1f2b",
-                    border: "1px solid #fff",
+                    color: cell.textColor || colors.text,
+                    border: `1px solid ${colors.bg}`,
                     fontVariantNumeric: "tabular-nums",
                     cursor: cell.onClick ? "pointer" : "default",
                   }}
@@ -72,19 +74,20 @@ export default function HeatmapGrid({ rowLabels, colLabels, cells, rowLabelWidth
   );
 }
 
-/** Diverging red-white-green scale for values roughly in [-1, 1] (e.g. Spearman rho, returns as fractions). */
+/** Diverging dark-neutral -> green/red scale for values roughly in [-1, 1] (e.g. Spearman rho,
+ * returns as fractions) — interpolates from the app's dark surface tone (26,30,40) at t=0 up to
+ * a legible green/red at the extremes, instead of a light-mode white-to-color scale. */
 export function divergingColor(value, maxAbs = 1) {
-  if (value === null || value === undefined || Number.isNaN(value)) return "#f3f4f6";
+  if (value === null || value === undefined || Number.isNaN(value)) return colors.surfaceAlt;
   const t = Math.max(-1, Math.min(1, value / maxAbs));
+  const base = [26, 30, 40];
   if (t >= 0) {
-    // white -> green
-    const g = Math.round(247 - t * (247 - 34));
-    const r = Math.round(247 - t * (247 - 120));
-    return `rgb(${r},${Math.round(247 - t * (247 - 197))},${g})`;
+    const target = [22, 120, 74]; // success green
+    const mix = base.map((b, i) => Math.round(b + t * (target[i] - b)));
+    return `rgb(${mix[0]},${mix[1]},${mix[2]})`;
   }
-  // white -> red
   const s = -t;
-  const g = Math.round(247 - s * (247 - 72));
-  const b = Math.round(247 - s * (247 - 63));
-  return `rgb(${Math.round(247 - s * (247 - 214))},${g},${b})`;
+  const target = [130, 45, 40]; // danger red
+  const mix = base.map((b, i) => Math.round(b + s * (target[i] - b)));
+  return `rgb(${mix[0]},${mix[1]},${mix[2]})`;
 }

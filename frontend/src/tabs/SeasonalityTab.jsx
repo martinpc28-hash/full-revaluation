@@ -239,7 +239,7 @@ export default function SeasonalityTab({ setStatus }) {
   return (
     <div>
       <div style={ui.card}>
-        <h2 style={ui.cardTitle}>🔬 Laboratorio de hipótesis de estacionalidad</h2>
+        <h2 style={ui.cardTitle}>Laboratorio de hipótesis de estacionalidad</h2>
         <p style={ui.cardSubtitle}>
           ¿Los activos que rentan mejor en una ventana temprana del año terminan liderando el resto del año? Elegí un
           universo, una fuente de datos, y una ventana de señal (por defecto enero-febrero) para probarlo.
@@ -382,10 +382,10 @@ export default function SeasonalityTab({ setStatus }) {
 
           <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
             <button style={ui.button("primary")} onClick={() => runTest()} disabled={testLoading}>
-              {testLoading ? "Corriendo…" : "🚀 Correr test"}
+              {testLoading ? "Corriendo…" : "Correr test"}
             </button>
             <button style={ui.button("secondary")} onClick={runSweep} disabled={sweepLoading}>
-              {sweepLoading ? "Corriendo…" : "📊 Barrido de ventanas"}
+              {sweepLoading ? "Corriendo…" : "Barrido de ventanas"}
             </button>
           </div>
         </div>
@@ -427,7 +427,7 @@ export default function SeasonalityTab({ setStatus }) {
 function DataBadge({ meta }) {
   return (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-      <span style={ui.badge("success")}>✅ {meta.source}</span>
+      <span style={ui.badge("success")}>{meta.source}</span>
       <span style={ui.badge("neutral")}>{meta.currency}</span>
       <span style={ui.badge("neutral")}>
         {meta.yearFrom}–{meta.yearTo}
@@ -452,7 +452,7 @@ function CoverageStrip({ coverage, tickers, yearFrom, yearTo }) {
       const flagged = insufficientYears.has(y);
       return {
         label: covered ? "✓" : "",
-        color: !covered ? "#f3f4f6" : flagged ? colors.warningSoft : colors.successSoft,
+        color: !covered ? colors.surfaceAlt : flagged ? colors.warningSoft : colors.successSoft,
         title: `${t} ${y}: ${covered ? "con datos" : "sin datos"}${flagged ? " — año con pocos activos" : ""}`,
       };
     })
@@ -545,8 +545,8 @@ function RankingHeatmaps({ panel, tickers, yearFrom, yearTo, onAudit }) {
         const isWinner = highlightWinner && winnerByYear.get(y) === t;
         const componentAudit = p ? p[auditField] : null;
         return {
-          label: v === null || v === undefined ? "" : `${isWinner ? "🏆" : ""}${(v * 100).toFixed(0)}%`,
-          color: v === null || v === undefined ? "#f3f4f6" : divergingColor(v, 0.4),
+          label: v === null || v === undefined ? "" : `${isWinner ? "*" : ""}${(v * 100).toFixed(0)}%`,
+          color: v === null || v === undefined ? colors.surfaceAlt : divergingColor(v, 0.4),
           title: p
             ? `${t} ${y}: ${(v * 100).toFixed(1)}%${isWinner ? " — ganador de la ventana de señal ese año" : ""} — click para auditar`
             : "sin datos",
@@ -563,7 +563,7 @@ function RankingHeatmaps({ panel, tickers, yearFrom, yearTo, onAudit }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div>
         <h4 style={{ margin: "0 0 8px 0", fontSize: 14 }}>
-          Retorno — ventana de señal <span style={{ fontWeight: 400, color: colors.textMuted }}>(🏆 = ganador del año)</span>
+          Retorno — ventana de señal <span style={{ fontWeight: 400, color: colors.textMuted }}>(* = ganador del año)</span>
         </h4>
         <div style={ui.tableScroll}>
           <HeatmapGrid
@@ -587,7 +587,7 @@ function RankingHeatmaps({ panel, tickers, yearFrom, yearTo, onAudit }) {
           <HeatmapGrid rowLabels={tickers} colLabels={years} cells={buildCells("fullYearReturn")} cellWidth={44} rowLabelWidth={70} />
         </div>
       </div>
-      <p style={{ ...ui.muted, margin: 0 }}>💡 Click en cualquier celda con valor para ver el cálculo exacto (fechas y precios usados).</p>
+      <p style={{ ...ui.muted, margin: 0 }}>Click en cualquier celda con valor para ver el cálculo exacto (fechas y precios usados).</p>
     </div>
   );
 }
@@ -716,7 +716,7 @@ function TestResults({ result, onAudit }) {
             { key: "cumulativeStrategy", label: "Cuartil superior", color: colors.primary },
             { key: "cumulativeBenchmark", label: "Universo", color: colors.textMuted },
             ...(strategy.sp500Available ? [{ key: "cumulativeSp500", label: "S&P 500", color: colors.warning }] : []),
-            ...(strategy.msciWorldAvailable ? [{ key: "cumulativeMsciWorld", label: "MSCI World", color: "#9333ea" }] : []),
+            ...(strategy.msciWorldAvailable ? [{ key: "cumulativeMsciWorld", label: "MSCI World", color: "#a78bfa" }] : []),
           ]}
         />
 
@@ -882,10 +882,10 @@ function SweepResults({ result }) {
   const grid = MONTH_NAMES.map((_, monthIdx) =>
     lengths.map((len) => {
       const c = byKey.get(`${monthIdx + 1}-${len}`);
-      if (!c) return { label: "—", color: "#f3f4f6", title: "ventana cruza fin de año — excluida" };
+      if (!c) return { label: "—", color: colors.surfaceAlt, title: "ventana cruza fin de año — excluida" };
       return {
         label: c.rho === null ? "n/d" : c.rho.toFixed(2),
-        color: c.rho === null ? "#f3f4f6" : divergingColor(c.rho, 0.5),
+        color: c.rho === null ? colors.surfaceAlt : divergingColor(c.rho, 0.5),
         title: `Inicio ${MONTH_NAMES[monthIdx]}, ${len} mes(es): ρ=${c.rho?.toFixed(3) ?? "n/d"} (n=${c.n})`,
       };
     })
@@ -943,7 +943,7 @@ function MonteCarloSection({
   const defaultMinYears = Math.max(2, Math.round((mcYearTo - mcYearFrom + 1) / 2));
   return (
     <div style={ui.card}>
-      <h2 style={ui.cardTitle}>🎲 Optimización combinatoria (Monte Carlo)</h2>
+      <h2 style={ui.cardTitle}>Optimización combinatoria (Monte Carlo)</h2>
       <p style={ui.cardSubtitle}>
         Prueba TODAS las combinaciones válidas de universo (sectores y/o países — nunca mezclados en una misma
         cartera) × ventana de señal (mes de inicio × duración), y las ordena por retorno ajustado por riesgo (CAGR ÷
@@ -953,7 +953,7 @@ function MonteCarloSection({
       </p>
 
       <div style={{ marginBottom: 16 }}>
-        <p style={{ fontSize: 13, color: "#374151", margin: "0 0 6px 0", fontWeight: 600 }}>Modo de selección de activos</p>
+        <p style={{ fontSize: 13, color: colors.textMuted, margin: "0 0 6px 0", fontWeight: 600 }}>Modo de selección de activos</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, cursor: "pointer" }}>
             <input
@@ -1013,7 +1013,7 @@ function MonteCarloSection({
 
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
         <div style={{ minWidth: 160 }}>
-          <p style={{ fontSize: 13, color: "#374151", margin: "0 0 6px 0", fontWeight: 600 }}>Universo a explorar</p>
+          <p style={{ fontSize: 13, color: colors.textMuted, margin: "0 0 6px 0", fontWeight: 600 }}>Universo a explorar</p>
           {["SECTOR", "COUNTRY"].map((u) => (
             <label key={u} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer", marginBottom: 4 }}>
               <input type="checkbox" checked={mcUniverses.has(u)} onChange={() => toggleInSet(mcUniverses, setMcUniverses, u)} />
@@ -1023,7 +1023,7 @@ function MonteCarloSection({
         </div>
 
         <div style={{ minWidth: 160 }}>
-          <p style={{ fontSize: 13, color: "#374151", margin: "0 0 6px 0", fontWeight: 600 }}>Duración de ventana a probar</p>
+          <p style={{ fontSize: 13, color: colors.textMuted, margin: "0 0 6px 0", fontWeight: 600 }}>Duración de ventana a probar</p>
           {[1, 2, 3].map((len) => (
             <label key={len} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer", marginBottom: 4 }}>
               <input type="checkbox" checked={mcLengths.has(len)} onChange={() => toggleInSet(mcLengths, setMcLengths, len)} />
@@ -1081,16 +1081,6 @@ function MonteCarloSection({
           </label>
         </div>
       </div>
-      {needsSize && (
-        <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-          <span style={{ ...ui.muted, marginRight: 4 }}>Atajos:</span>
-          {[2, 3, 4, 5, 6].map((n) => (
-            <button key={n} style={ui.button(mcFixedSize === n ? "primary" : "secondary")} onClick={() => setMcFixedSize(n)}>
-              {n}
-            </button>
-          ))}
-        </div>
-      )}
       <p style={{ ...ui.muted, marginTop: 10 }}>
         "Mínimo de años usados" descarta combinaciones armadas con muy pocos años (p. ej. un activo que empezó a
         cotizar hace poco) — sin ese piso, un resultado con solo 5-7 años de historia puede parecer mejor que otro
@@ -1100,7 +1090,7 @@ function MonteCarloSection({
 
       <div style={{ marginTop: 16 }}>
         <button style={ui.button("primary")} onClick={onRun} disabled={mcLoading}>
-          {mcLoading ? "Corriendo combinaciones…" : "🎲 Correr Monte Carlo"}
+          {mcLoading ? "Corriendo combinaciones…" : "Correr Monte Carlo"}
         </button>
       </div>
 
@@ -1165,7 +1155,7 @@ function MonteCarloResults({ result }) {
           }}
         >
           <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: colors.primary }}>
-            🏆 Combinación óptima (mayor retorno ajustado por riesgo)
+            Combinación óptima (mayor retorno ajustado por riesgo)
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
             {UNIVERSE_LABELS[best.universe]} · Señal {windowLabel(best.startMonth, best.lengthMonths)}
@@ -1194,7 +1184,7 @@ function MonteCarloResults({ result }) {
             </span>
           </div>
           <div style={{ marginTop: 10, fontSize: 12, color: colors.primary, fontWeight: 600 }}>
-            👆 {isFixed ? "Click para confirmar los activos elegidos" : "Click para ver qué activos eligió cada año"}
+            {isFixed ? "Click para confirmar los activos elegidos" : "Click para ver qué activos eligió cada año"}
           </div>
         </div>
       )}
@@ -1220,7 +1210,7 @@ function MonteCarloResults({ result }) {
             {combos.map((c, i) => (
               <tr key={`${c.universe}-${c.startMonth}-${c.lengthMonths}`} style={i === 0 ? { background: colors.primarySoft } : undefined}>
                 <td style={ui.td}>
-                  {i === 0 ? "🏆 " : ""}
+                  {i === 0 ? "* " : ""}
                   {UNIVERSE_LABELS[c.universe]}
                 </td>
                 <td style={ui.td}>{windowLabel(c.startMonth, c.lengthMonths)}</td>
@@ -1277,7 +1267,7 @@ function ComboPicksDrawer({ detail, onClose }) {
 
   return (
     <Drawer
-      kicker="📋 Composición de la cartera"
+      kicker="Composición de la cartera"
       title={`${UNIVERSE_LABELS[detail.universe]} · Señal ${windowLabel(detail.startMonth, detail.lengthMonths)}`}
       subtitle={
         isConstant
@@ -1358,7 +1348,7 @@ function ComboScatter({ combos, best }) {
         {combos.map((c, i) => {
           const isBest =
             best && c.universe === best.universe && c.startMonth === best.startMonth && c.lengthMonths === best.lengthMonths;
-          const color = c.universe === "COUNTRY" ? "#9333ea" : colors.primary;
+          const color = c.universe === "COUNTRY" ? "#a78bfa" : colors.primary;
           return (
             <circle
               key={i}
@@ -1392,7 +1382,7 @@ function ComboScatter({ combos, best }) {
           <text x={16} y={8} fontSize="11" fill={colors.textMuted}>
             Sectores
           </text>
-          <circle cx={6} cy={20} r={4} fill="#9333ea" />
+          <circle cx={6} cy={20} r={4} fill="#a78bfa" />
           <text x={16} y={24} fontSize="11" fill={colors.textMuted}>
             Países
           </text>

@@ -66,10 +66,10 @@ export default function PnlHistogram({ pnlValues, bins = 20 }) {
           strokeWidth={1}
         />
       )}
-      <text x={padding.left} y={height - 6} fontSize="11" fill="#666">
+      <text x={padding.left} y={height - 6} fontSize="11" fill={colors.textMuted}>
         {min.toLocaleString(undefined, { maximumFractionDigits: 0 })}
       </text>
-      <text x={width - padding.right} y={height - 6} fontSize="11" fill="#666" textAnchor="end">
+      <text x={width - padding.right} y={height - 6} fontSize="11" fill={colors.textMuted} textAnchor="end">
         {max.toLocaleString(undefined, { maximumFractionDigits: 0 })}
       </text>
     </svg>

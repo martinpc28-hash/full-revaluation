@@ -166,7 +166,7 @@ export default function AuditPanel({ audit, onClose }) {
   const average = validValues.length ? validValues.reduce((a, b) => a + b, 0) / validValues.length : null;
 
   return (
-    <Drawer kicker="🔍 Auditoría del retorno" title={audit.title} subtitle={audit.subtitle} onClose={onClose}>
+    <Drawer kicker="Auditoría del retorno" title={audit.title} subtitle={audit.subtitle} onClose={onClose}>
       {isAverage && (
         <div
           style={{
