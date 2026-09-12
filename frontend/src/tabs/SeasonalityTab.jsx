@@ -68,11 +68,21 @@ export default function SeasonalityTab({ setStatus }) {
   const [mcYearFrom, setMcYearFrom] = useState(DEFAULT_YEAR_FROM);
   const [mcYearTo, setMcYearTo] = useState(DEFAULT_YEAR_TO);
   const [mcMinAssetsPerYear, setMcMinAssetsPerYear] = useState(2);
-  // "ROTATING" (default) re-picks the top quartile every year, like the strategy above.
-  // "FIXED" commits to the same mcFixedSize tickers for the whole period — searches every
-  // possible subset of that size and keeps the best, instead of letting the basket rotate.
+  // "ROTATING" (default) re-picks the top quartile of the WHOLE universe every year, like the
+  // strategy above. "FIXED" commits to the same mcFixedSize tickers for the whole period,
+  // held together. "ROTATING_SUBSET" restricts that same rotation logic to a chosen group of
+  // mcFixedSize tickers instead of the whole universe — e.g. size 2 reproduces "always hold
+  // whichever of these two led", searched over every possible pair instead of picked by hand.
   const [mcMode, setMcMode] = useState("ROTATING");
   const [mcFixedSize, setMcFixedSize] = useState(3);
+  // Restricts every window tested to start in January — off by default (sweeps all 12 months
+  // to find seasonality effects anywhere in the year), but useful to isolate "which assets"
+  // from "which month" when comparing against a hand-picked Jan-Feb test elsewhere on the page.
+  const [mcForceJanuary, setMcForceJanuary] = useState(false);
+  // A combo built on very few years (e.g. a pair involving a ticker that only started trading
+  // recently) can show a deceptively high score from a short, lucky sample. Null = let the
+  // backend default to half the requested year range.
+  const [mcMinYearsUsed, setMcMinYearsUsed] = useState(null);
   const [mcResult, setMcResult] = useState(null);
   const [mcLoading, setMcLoading] = useState(false);
 
@@ -198,8 +208,8 @@ export default function SeasonalityTab({ setStatus }) {
       setStatus({ type: "error", text: "El año inicial del Monte Carlo no puede ser mayor que el año final." });
       return;
     }
-    if (mcMode === "FIXED" && (!mcFixedSize || mcFixedSize < 2)) {
-      setStatus({ type: "error", text: "Para cartera fija, elegí una cantidad de activos fijos de al menos 2." });
+    if ((mcMode === "FIXED" || mcMode === "ROTATING_SUBSET") && (!mcFixedSize || mcFixedSize < 2)) {
+      setStatus({ type: "error", text: "Para este modo, elegí una cantidad de activos de al menos 2." });
       return;
     }
     setMcLoading(true);
@@ -213,8 +223,10 @@ export default function SeasonalityTab({ setStatus }) {
         yearTo: mcYearTo,
         minAssetsPerYear: mcMinAssetsPerYear,
         lengthMonths: [...mcLengths],
+        startMonths: mcForceJanuary ? [1] : undefined,
         mode: mcMode,
-        fixedSize: mcMode === "FIXED" ? mcFixedSize : undefined,
+        fixedSize: mcMode === "FIXED" || mcMode === "ROTATING_SUBSET" ? mcFixedSize : undefined,
+        minYearsUsed: mcMinYearsUsed,
       });
       setMcResult(result);
     } catch (e) {
@@ -397,6 +409,10 @@ export default function SeasonalityTab({ setStatus }) {
         setMcMode={setMcMode}
         mcFixedSize={mcFixedSize}
         setMcFixedSize={setMcFixedSize}
+        mcForceJanuary={mcForceJanuary}
+        setMcForceJanuary={setMcForceJanuary}
+        mcMinYearsUsed={mcMinYearsUsed}
+        setMcMinYearsUsed={setMcMinYearsUsed}
         mcLoading={mcLoading}
         onRun={runMonteCarlo}
         mcResult={mcResult}
@@ -914,12 +930,17 @@ function MonteCarloSection({
   setMcMode,
   mcFixedSize,
   setMcFixedSize,
+  mcForceJanuary,
+  setMcForceJanuary,
+  mcMinYearsUsed,
+  setMcMinYearsUsed,
   mcLoading,
   onRun,
   mcResult,
   toggleInSet,
 }) {
-  const isFixed = mcMode === "FIXED";
+  const needsSize = mcMode === "FIXED" || mcMode === "ROTATING_SUBSET";
+  const defaultMinYears = Math.max(2, Math.round((mcYearTo - mcYearFrom + 1) / 2));
   return (
     <div style={ui.card}>
       <h2 style={ui.cardTitle}>🎲 Optimización combinatoria (Monte Carlo)</h2>
@@ -935,23 +956,55 @@ function MonteCarloSection({
         <p style={{ fontSize: 13, color: "#374151", margin: "0 0 6px 0", fontWeight: 600 }}>Modo de selección de activos</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, cursor: "pointer" }}>
-            <input type="radio" name="mcMode" checked={!isFixed} onChange={() => setMcMode("ROTATING")} style={{ marginTop: 2 }} />
+            <input
+              type="radio"
+              name="mcMode"
+              checked={mcMode === "ROTATING"}
+              onChange={() => setMcMode("ROTATING")}
+              style={{ marginTop: 2 }}
+            />
             <span>
-              <strong>Rotar cuartil superior cada año</strong>
+              <strong>Rotar cuartil superior de todo el universo</strong>
               <br />
               <span style={{ color: colors.textMuted }}>
-                Re-elige el cuartil superior por señal todos los años (como la estrategia principal de arriba).
+                Re-elige el cuartil superior por señal de TODO el universo, todos los años (como la estrategia
+                principal de arriba).
               </span>
             </span>
           </label>
           <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, cursor: "pointer" }}>
-            <input type="radio" name="mcMode" checked={isFixed} onChange={() => setMcMode("FIXED")} style={{ marginTop: 2 }} />
+            <input
+              type="radio"
+              name="mcMode"
+              checked={mcMode === "ROTATING_SUBSET"}
+              onChange={() => setMcMode("ROTATING_SUBSET")}
+              style={{ marginTop: 2 }}
+            />
+            <span>
+              <strong>Rotar el ganador dentro de un grupo elegido</strong>
+              <br />
+              <span style={{ color: colors.textMuted }}>
+                Elegí cuántos activos (2, 3, 4…) y busca, entre TODAS las combinaciones posibles de ese tamaño, el
+                grupo donde "quedarme siempre con el/los que mejor vinieron viniendo en la señal" dio mejor
+                resultado. Con 2 activos reproduce "siempre el ganador entre estos dos", probado para cada par
+                posible — no uno elegido a mano.
+              </span>
+            </span>
+          </label>
+          <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, cursor: "pointer" }}>
+            <input
+              type="radio"
+              name="mcMode"
+              checked={mcMode === "FIXED"}
+              onChange={() => setMcMode("FIXED")}
+              style={{ marginTop: 2 }}
+            />
             <span>
               <strong>Cartera fija (sin rotación)</strong>
               <br />
               <span style={{ color: colors.textMuted }}>
-                Elegí cuántos activos (3, 4, 5, 6…) y busca, entre TODAS las combinaciones posibles de esa cantidad,
-                la que mejor resultado dio manteniendo siempre los mismos activos todo el período.
+                Elegí cuántos activos y busca la combinación que dio mejor resultado manteniendo siempre los MISMOS
+                activos todo el período (no rota entre ellos, los mantiene juntos).
               </span>
             </span>
           </label>
@@ -977,6 +1030,10 @@ function MonteCarloSection({
               {len} mes{len > 1 ? "es" : ""}
             </label>
           ))}
+          <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer", marginTop: 8 }}>
+            <input type="checkbox" checked={mcForceJanuary} onChange={(e) => setMcForceJanuary(e.target.checked)} />
+            Forzar inicio en enero
+          </label>
         </div>
 
         <div style={ui.row}>
@@ -988,9 +1045,9 @@ function MonteCarloSection({
             Años hasta
             <input style={ui.input} type="number" value={mcYearTo} onChange={(e) => setMcYearTo(Number(e.target.value))} />
           </label>
-          {isFixed ? (
+          {needsSize ? (
             <label style={ui.label}>
-              N° de activos fijos
+              N° de activos
               <input
                 style={ui.input}
                 type="number"
@@ -1011,18 +1068,35 @@ function MonteCarloSection({
               />
             </label>
           )}
+          <label style={ui.label}>
+            Mínimo de años usados
+            <input
+              style={ui.input}
+              type="number"
+              min={2}
+              placeholder={String(defaultMinYears)}
+              value={mcMinYearsUsed ?? ""}
+              onChange={(e) => setMcMinYearsUsed(e.target.value === "" ? null : Number(e.target.value))}
+            />
+          </label>
         </div>
       </div>
-      {isFixed && (
+      {needsSize && (
         <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
           <span style={{ ...ui.muted, marginRight: 4 }}>Atajos:</span>
-          {[3, 4, 5, 6].map((n) => (
+          {[2, 3, 4, 5, 6].map((n) => (
             <button key={n} style={ui.button(mcFixedSize === n ? "primary" : "secondary")} onClick={() => setMcFixedSize(n)}>
               {n}
             </button>
           ))}
         </div>
       )}
+      <p style={{ ...ui.muted, marginTop: 10 }}>
+        "Mínimo de años usados" descarta combinaciones armadas con muy pocos años (p. ej. un activo que empezó a
+        cotizar hace poco) — sin ese piso, un resultado con solo 5-7 años de historia puede parecer mejor que otro
+        con 20 años solo por casualidad de muestra chica. Vacío = la mitad del rango de años pedido ({defaultMinYears}
+        {" "}en este caso).
+      </p>
 
       <div style={{ marginTop: 16 }}>
         <button style={ui.button("primary")} onClick={onRun} disabled={mcLoading}>
@@ -1043,20 +1117,37 @@ function fixedTickersOf(picksByYear) {
   return years.length ? picksByYear[years[0]] : null;
 }
 
+const MODE_LABELS = {
+  ROTATING: "Rotación de todo el universo",
+  ROTATING_SUBSET: `Rotación dentro de un grupo elegido`,
+  FIXED: `Cartera fija`,
+};
+
 function MonteCarloResults({ result }) {
   const { meta, combos, best } = result;
   const [picksDetail, setPicksDetail] = useState(null);
   const isFixed = meta.mode === "FIXED";
 
   if (!combos || combos.length === 0) {
-    return <p style={{ ...ui.muted, marginTop: 16 }}>Ninguna combinación tuvo datos suficientes con esta configuración.</p>;
+    return (
+      <p style={{ ...ui.muted, marginTop: 16 }}>
+        Ninguna combinación tuvo datos suficientes con esta configuración
+        {meta.discardedForShortSample > 0 &&
+          ` (${meta.discardedForShortSample} se descartaron por tener menos de ${meta.minYearsUsed} años de historia — bajá "Mínimo de años usados" si querés verlas)`}
+        .
+      </p>
+    );
   }
 
   return (
     <div style={{ marginTop: 20 }}>
       <p style={ui.muted}>
-        {meta.combosEvaluated} combinaciones evaluadas · {meta.source} · {meta.yearFrom}–{meta.yearTo}
-        {isFixed && ` · Cartera fija de ${meta.fixedSize} activos`}
+        {meta.combosEvaluated} combinaciones evaluadas · {meta.source} · {meta.yearFrom}–{meta.yearTo} ·{" "}
+        {MODE_LABELS[meta.mode] || meta.mode}
+        {(meta.mode === "FIXED" || meta.mode === "ROTATING_SUBSET") && ` de ${meta.fixedSize} activos`}
+        {meta.startMonths && meta.startMonths.length === 1 && meta.startMonths[0] === 1 && " · señal forzada a Enero"}
+        {meta.discardedForShortSample > 0 &&
+          ` · ${meta.discardedForShortSample} combinación(es) con menos de ${meta.minYearsUsed} años descartadas`}
       </p>
 
       {best && (

@@ -7,12 +7,16 @@ import java.util.List;
  * evaluated separately — never mixed into one basket) and ranks them by risk-adjusted
  * return, to answer "which window + universe would have worked best over this period".
  *
- * Two modes for how the basket within each (universe, window) cell is chosen:
- *   - "ROTATING" (default): re-picks the signal-window top quartile every year, same as the
- *     main strategy backtest above in the module.
- *   - "FIXED": commits to ONE set of fixedSize tickers for the WHOLE period — searches every
- *     possible fixedSize-ticker subset of the universe for that window and keeps the best —
- *     for "don't change assets on me every year, just tell me the best N to hold". */
+ * Three modes for how the basket within each (universe, window) cell is chosen:
+ *   - "ROTATING" (default): re-picks the signal-window top quartile of the WHOLE universe
+ *     every year, same as the main strategy backtest above in the module.
+ *   - "FIXED": commits to ONE set of fixedSize tickers for the WHOLE period, held together —
+ *     searches every possible fixedSize-ticker subset of the universe and keeps the best.
+ *   - "ROTATING_SUBSET": like ROTATING, but restricted to a chosen fixedSize-ticker subset
+ *     instead of the whole universe — searches every possible subset and, for each, picks the
+ *     top quartile WITHIN just that subset every year (e.g. fixedSize=2 reproduces "always
+ *     hold whichever of these two tickers led the signal window", generalized to search every
+ *     possible pair/trio/etc. instead of the user picking one by hand). */
 public class SeasonalityMonteCarloRequest {
     public List<String> universes = List.of("SECTOR", "COUNTRY"); // "SECTOR" and/or "COUNTRY"
     public String dataSource = "YAHOO_FINANCE";
@@ -21,6 +25,12 @@ public class SeasonalityMonteCarloRequest {
     public int yearTo;
     public int minAssetsPerYear = 2; // only used in ROTATING mode
     public List<Integer> lengthMonths = List.of(1, 2, 3); // which window lengths to try
-    public String mode = "ROTATING"; // "ROTATING" | "FIXED"
-    public Integer fixedSize; // required (>=2) when mode == "FIXED"
+    public List<Integer> startMonths; // null/empty = all 12; e.g. [1] to force every window to start in January
+    public String mode = "ROTATING"; // "ROTATING" | "FIXED" | "ROTATING_SUBSET"
+    public Integer fixedSize; // required (>=2) when mode == "FIXED" or "ROTATING_SUBSET"
+    // Combos built on very few years (e.g. a pair involving a ticker that's only traded since
+    // 2019) can show a deceptively high score just from a short, lucky sample — this discards
+    // any combo using fewer years than this before ranking. Null defaults to half the requested
+    // year range (min 2), so the ranking favors combos with a genuinely long track record.
+    public Integer minYearsUsed;
 }
