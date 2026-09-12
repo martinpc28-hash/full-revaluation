@@ -482,6 +482,33 @@ function RankingHeatmaps({ panel, tickers, yearFrom, yearTo, onAudit }) {
   );
 }
 
+// Footer row for the per-year strategy tables: how many years the differential came out
+// positive vs. negative, out of the years with actual data — a quick "does this beat the
+// benchmark more often than not" tally to put the year-by-year detail above in context.
+function DiffScoreRow({ perYear, diffKey, colSpan }) {
+  const rows = perYear.filter((r) => r[diffKey] !== null && r[diffKey] !== undefined);
+  const positive = rows.filter((r) => r[diffKey] >= 0).length;
+  const pctPositive = rows.length ? Math.round((positive / rows.length) * 100) : 0;
+  return (
+    <tr>
+      <td
+        colSpan={colSpan}
+        style={{
+          ...ui.td,
+          borderTop: `2px solid ${colors.border}`,
+          borderBottom: "none",
+          fontWeight: 700,
+          color: colors.text,
+          background: colors.surfaceAlt,
+          whiteSpace: "normal",
+        }}
+      >
+        {positive}/{rows.length} años con diferencial positivo ({pctPositive}%)
+      </td>
+    </tr>
+  );
+}
+
 function TestResults({ result, onAudit }) {
   const { meta, panel, coverage, correlationVsRest, correlationVsFullYear, persistenceVsRest, persistenceVsFullYear, strategy } = result;
   const tickers = meta.tickers;
@@ -645,6 +672,7 @@ function TestResults({ result, onAudit }) {
                   </td>
                 </tr>
               ))}
+              <DiffScoreRow perYear={strategy.perYear} diffKey="diff" colSpan={5} />
             </tbody>
           </table>
         </div>
@@ -696,6 +724,7 @@ function TestResults({ result, onAudit }) {
                     </td>
                   </tr>
                 ))}
+                <DiffScoreRow perYear={strategy.perYear} diffKey="diffVsSp500" colSpan={6} />
               </tbody>
             </table>
           </div>
