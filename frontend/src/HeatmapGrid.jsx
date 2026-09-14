@@ -75,12 +75,12 @@ export default function HeatmapGrid({ rowLabels, colLabels, cells, rowLabelWidth
 }
 
 /** Diverging dark-neutral -> green/red scale for values roughly in [-1, 1] (e.g. Spearman rho,
- * returns as fractions) — interpolates from the app's dark surface tone (26,30,40) at t=0 up to
+ * returns as fractions) — interpolates from the app's dark surface tone (47,51,62) at t=0 up to
  * a legible green/red at the extremes, instead of a light-mode white-to-color scale. */
 export function divergingColor(value, maxAbs = 1) {
   if (value === null || value === undefined || Number.isNaN(value)) return colors.surfaceAlt;
   const t = Math.max(-1, Math.min(1, value / maxAbs));
-  const base = [26, 30, 40];
+  const base = [47, 51, 62]; // matches theme.js colors.surfaceAlt
   if (t >= 0) {
     const target = [22, 120, 74]; // success green
     const mix = base.map((b, i) => Math.round(b + t * (target[i] - b)));

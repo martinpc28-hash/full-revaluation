@@ -3,21 +3,21 @@
 // of three separate forms glued together.
 
 export const colors = {
-  bg: "#0b0d12",
-  surface: "#12151c",
-  surfaceAlt: "#1a1e28",
-  border: "#2a2f3d",
+  bg: "#1c1f26",
+  surface: "#262a33",
+  surfaceAlt: "#2f333e",
+  border: "#3d4250",
   text: "#e8eaf0",
-  textMuted: "#9aa1b0",
+  textMuted: "#a3aab8",
   primary: "#5b8def",
-  primaryDark: "#82aaf5",
-  primarySoft: "#1b2740",
+  primaryDark: "#8fb4f7",
+  primarySoft: "#2a3651",
   danger: "#f2685c",
-  dangerSoft: "#3a1f1d",
+  dangerSoft: "#40282a",
   success: "#3ecf7e",
-  successSoft: "#173625",
+  successSoft: "#223b30",
   warning: "#e2a13d",
-  warningSoft: "#3a2c14",
+  warningSoft: "#40331d",
 };
 
 export const shell = {
@@ -149,7 +149,7 @@ export const ui = {
   bannerError: {
     background: colors.dangerSoft,
     color: colors.danger,
-    border: `1px solid #5c2c28`,
+    border: `1px solid #6b3934`,
     borderRadius: 8,
     padding: "10px 14px",
     marginBottom: 16,
@@ -158,7 +158,7 @@ export const ui = {
   bannerSuccess: {
     background: colors.successSoft,
     color: colors.success,
-    border: `1px solid #1f4a30`,
+    border: `1px solid #2e5a41`,
     borderRadius: 8,
     padding: "10px 14px",
     marginBottom: 16,
