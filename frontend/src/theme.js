@@ -3,21 +3,21 @@
 // of three separate forms glued together.
 
 export const colors = {
-  bg: "#1c1f26",
-  surface: "#262a33",
-  surfaceAlt: "#2f333e",
-  border: "#3d4250",
-  text: "#e8eaf0",
-  textMuted: "#a3aab8",
-  primary: "#5b8def",
-  primaryDark: "#8fb4f7",
-  primarySoft: "#2a3651",
-  danger: "#f2685c",
-  dangerSoft: "#40282a",
-  success: "#3ecf7e",
-  successSoft: "#223b30",
-  warning: "#e2a13d",
-  warningSoft: "#40331d",
+  bg: "#2b2f38",
+  surface: "#373c47",
+  surfaceAlt: "#444a57",
+  border: "#565c6c",
+  text: "#f0f1f5",
+  textMuted: "#b0b6c4",
+  primary: "#6b98f2",
+  primaryDark: "#a6c3f8",
+  primarySoft: "#3a4868",
+  danger: "#f47b70",
+  dangerSoft: "#4f3236",
+  success: "#4fdb8e",
+  successSoft: "#2c4a3c",
+  warning: "#eab157",
+  warningSoft: "#4f4026",
 };
 
 export const shell = {
@@ -149,7 +149,7 @@ export const ui = {
   bannerError: {
     background: colors.dangerSoft,
     color: colors.danger,
-    border: `1px solid #6b3934`,
+    border: `1px solid #7a4640`,
     borderRadius: 8,
     padding: "10px 14px",
     marginBottom: 16,
@@ -158,7 +158,7 @@ export const ui = {
   bannerSuccess: {
     background: colors.successSoft,
     color: colors.success,
-    border: `1px solid #2e5a41`,
+    border: `1px solid #3d6b50`,
     borderRadius: 8,
     padding: "10px 14px",
     marginBottom: 16,
