@@ -1,11 +1,23 @@
-# Full Revaluation Engine
+# Hypothesis Laboratory
 
-Portfolio-level VaR calculated by **full revaluation**: every instrument is
-repriced from scratch under every market scenario (no delta/gamma
-approximation), the same approach a bank's market risk system uses for
-Full Revaluation batch runs.
+A seasonality hypothesis-testing lab for sector and country ETFs: does an
+asset that outperforms in an early window of the year go on to lead the
+rest of the year? Pick a universe, a signal window, and a date range, and
+test it against real historical data — correlation, quartile persistence,
+a look-ahead-bias-avoiding backtest, and an exhaustive combinatorial
+search ("Monte Carlo") over every window/universe combination.
 
-## What it does
+This module is built on top of a **full revaluation** market-risk engine
+(portfolio-level VaR where every instrument is repriced from scratch under
+every market scenario — no delta/gamma approximation). That original
+Dashboard/Portfolios/Stress-scenarios functionality is still fully
+implemented and deployed, just not linked from the nav bar right now — the
+live UI currently surfaces only the Seasonality Hypothesis Lab. See
+[`SeasonalityService`](src/main/java/com/martin/fullreval/service/SeasonalityService.java)
+for that module's engine, and the sections below for the original
+full-revaluation engine it sits on.
+
+## What the full-revaluation engine does
 
 1. Build one or more portfolios of bonds, European options, and equities
    (each can be booked in a different currency, converted to USD via FX

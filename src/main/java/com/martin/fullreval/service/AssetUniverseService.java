@@ -19,32 +19,32 @@ public class AssetUniverseService {
     public record AssetEntry(String ticker, String category, String label, String currency) {}
 
     private static final List<AssetEntry> COUNTRIES = List.of(
-            new AssetEntry("SPY", "COUNTRY", "Estados Unidos", "USD"),
-            new AssetEntry("EWZ", "COUNTRY", "Brasil", "BRL"),
-            new AssetEntry("EWJ", "COUNTRY", "Japón", "JPY"),
-            new AssetEntry("EWG", "COUNTRY", "Alemania", "EUR"),
-            new AssetEntry("EWU", "COUNTRY", "Reino Unido", "GBP"),
-            new AssetEntry("EWC", "COUNTRY", "Canadá", "CAD"),
+            new AssetEntry("SPY", "COUNTRY", "United States", "USD"),
+            new AssetEntry("EWZ", "COUNTRY", "Brazil", "BRL"),
+            new AssetEntry("EWJ", "COUNTRY", "Japan", "JPY"),
+            new AssetEntry("EWG", "COUNTRY", "Germany", "EUR"),
+            new AssetEntry("EWU", "COUNTRY", "United Kingdom", "GBP"),
+            new AssetEntry("EWC", "COUNTRY", "Canada", "CAD"),
             new AssetEntry("EWA", "COUNTRY", "Australia", "AUD"),
-            new AssetEntry("EWY", "COUNTRY", "Corea del Sur", "KRW"),
+            new AssetEntry("EWY", "COUNTRY", "South Korea", "KRW"),
             new AssetEntry("MCHI", "COUNTRY", "China", "CNY"),
             new AssetEntry("INDA", "COUNTRY", "India", "INR"),
-            new AssetEntry("EWW", "COUNTRY", "México", "MXN"),
-            new AssetEntry("EWL", "COUNTRY", "Suiza", "CHF")
+            new AssetEntry("EWW", "COUNTRY", "Mexico", "MXN"),
+            new AssetEntry("EWL", "COUNTRY", "Switzerland", "CHF")
     );
 
     private static final List<AssetEntry> SECTORS = List.of(
-            new AssetEntry("XLK", "SECTOR", "Tecnología", "USD"),
-            new AssetEntry("XLF", "SECTOR", "Financiero", "USD"),
-            new AssetEntry("XLE", "SECTOR", "Energía", "USD"),
-            new AssetEntry("XLV", "SECTOR", "Salud", "USD"),
-            new AssetEntry("XLY", "SECTOR", "Consumo discrecional", "USD"),
-            new AssetEntry("XLP", "SECTOR", "Consumo básico", "USD"),
-            new AssetEntry("XLI", "SECTOR", "Industrial", "USD"),
-            new AssetEntry("XLB", "SECTOR", "Materiales", "USD"),
+            new AssetEntry("XLK", "SECTOR", "Technology", "USD"),
+            new AssetEntry("XLF", "SECTOR", "Financials", "USD"),
+            new AssetEntry("XLE", "SECTOR", "Energy", "USD"),
+            new AssetEntry("XLV", "SECTOR", "Health Care", "USD"),
+            new AssetEntry("XLY", "SECTOR", "Consumer Discretionary", "USD"),
+            new AssetEntry("XLP", "SECTOR", "Consumer Staples", "USD"),
+            new AssetEntry("XLI", "SECTOR", "Industrials", "USD"),
+            new AssetEntry("XLB", "SECTOR", "Materials", "USD"),
             new AssetEntry("XLU", "SECTOR", "Utilities", "USD"),
-            new AssetEntry("XLRE", "SECTOR", "Bienes raíces", "USD"),
-            new AssetEntry("XLC", "SECTOR", "Comunicaciones", "USD")
+            new AssetEntry("XLRE", "SECTOR", "Real Estate", "USD"),
+            new AssetEntry("XLC", "SECTOR", "Communication Services", "USD")
     );
 
     public Map<String, Object> listAll() {

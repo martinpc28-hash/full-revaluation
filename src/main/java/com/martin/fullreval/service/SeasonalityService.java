@@ -195,7 +195,7 @@ public class SeasonalityService {
 
         return Map.of(
                 "meta", Map.of("source", source.getDisplayName(), "yearFrom", req.yearFrom, "yearTo", req.yearTo,
-                        "tickers", req.tickers, "comparison", "signal vs. resto del año"),
+                        "tickers", req.tickers, "comparison", "signal vs. rest of year"),
                 "cells", cells
         );
     }
@@ -220,7 +220,7 @@ public class SeasonalityService {
         boolean fixedMode = "FIXED".equals(modeUpper);
         boolean rotatingSubsetMode = "ROTATING_SUBSET".equals(modeUpper);
         if ((fixedMode || rotatingSubsetMode) && (req.fixedSize == null || req.fixedSize < 2)) {
-            throw new IllegalArgumentException("Para este modo, elegí una cantidad de activos >= 2");
+            throw new IllegalArgumentException("For this mode, pick a number of assets >= 2");
         }
         MarketDataSource source = sourceRegistry.get(req.dataSource);
         List<Integer> lengths = (req.lengthMonths == null || req.lengthMonths.isEmpty()) ? List.of(1, 2, 3) : req.lengthMonths;
@@ -713,7 +713,7 @@ public class SeasonalityService {
     }
 
     private void validateYearRange(int yearFrom, int yearTo) {
-        if (yearFrom > yearTo) throw new IllegalArgumentException("yearFrom no puede ser mayor que yearTo");
+        if (yearFrom > yearTo) throw new IllegalArgumentException("yearFrom cannot be greater than yearTo");
     }
 
     // ------------------------------------------------------------------
@@ -721,11 +721,11 @@ public class SeasonalityService {
     // ------------------------------------------------------------------
 
     private void validateWindow(int startMonth, int lengthMonths) {
-        if (startMonth < 1 || startMonth > 12) throw new IllegalArgumentException("signalStartMonth debe estar entre 1 y 12");
-        if (lengthMonths < 1 || lengthMonths > 11) throw new IllegalArgumentException("signalLengthMonths inválido");
+        if (startMonth < 1 || startMonth > 12) throw new IllegalArgumentException("signalStartMonth must be between 1 and 12");
+        if (lengthMonths < 1 || lengthMonths > 11) throw new IllegalArgumentException("signalLengthMonths is invalid");
         if (startMonth + lengthMonths - 1 > 12) {
-            throw new IllegalArgumentException("La ventana de señal no puede cruzar el fin de año "
-                    + "(mes de inicio + duración - 1 debe ser <= 12). Elegí una ventana más corta o que empiece antes.");
+            throw new IllegalArgumentException("The signal window can't cross into the next year "
+                    + "(start month + length - 1 must be <= 12). Pick a shorter window or an earlier start.");
         }
     }
 
@@ -777,8 +777,8 @@ public class SeasonalityService {
         return new ReturnCalc(value, from, to, startEntry.getKey(), startPrice, endEntry.getKey(), endPrice);
     }
 
-    /** JSON-friendly audit trail for one return calculation, shown in the UI's "auditar este
-     * número" panel: which ticker, which window, and the exact start/end date+price used. */
+    /** JSON-friendly audit trail for one return calculation, shown in the UI's "audit this
+     * number" panel: which ticker, which window, and the exact start/end date+price used. */
     private Map<String, Object> auditMap(String ticker, ReturnCalc rc) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("ticker", ticker);

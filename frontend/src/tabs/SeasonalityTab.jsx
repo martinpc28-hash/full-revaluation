@@ -6,7 +6,7 @@ import ScatterChart from "../ScatterChart.jsx";
 import LineChart from "../LineChart.jsx";
 import AuditPanel, { Drawer } from "../AuditPanel.jsx";
 
-// Shared style for any "Retorno" number the user can click to audit (see AuditPanel) —
+// Shared style for any "Return" number the user can click to audit (see AuditPanel) —
 // a dotted underline + pointer cursor signals it's interactive without being noisy.
 const auditableCell = {
   cursor: "pointer",
@@ -16,16 +16,16 @@ const auditableCell = {
   textUnderlineOffset: 3,
 };
 
-const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-const UNIVERSE_LABELS = { SECTOR: "Sectores", COUNTRY: "Países" };
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const UNIVERSE_LABELS = { SECTOR: "Sectors", COUNTRY: "Countries" };
 
-// e.g. startMonth=1 (Ene), lengthMonths=1 → señal es SOLO enero, y la cartera se compra
-// entrando febrero (el mes siguiente al último de la ventana) y se mantiene hasta el 31/12.
-// Se muestra explícito porque "Ene (1m)" solo, sin la flecha, generaba confusión sobre
-// cuándo arranca realmente la cartera.
+// e.g. startMonth=1 (Jan), lengthMonths=1 → signal is ONLY January, and the portfolio is
+// bought entering February (the month right after the window ends) and held through 12/31.
+// Shown explicitly because "Jan (1m)" alone, without the arrow, was confusing about when
+// the portfolio actually starts.
 function windowLabel(startMonth, lengthMonths) {
-  const holdStartMonth = startMonth + lengthMonths; // siempre <=12 para combos que sí aparecen
-  return `${MONTH_NAMES[startMonth - 1]} (${lengthMonths}m) → cartera desde ${MONTH_NAMES[holdStartMonth - 1]}`;
+  const holdStartMonth = startMonth + lengthMonths; // always <=12 for combos that actually appear
+  return `${MONTH_NAMES[startMonth - 1]} (${lengthMonths}m) → holdings from ${MONTH_NAMES[holdStartMonth - 1]}`;
 }
 const CURRENT_YEAR = new Date().getFullYear();
 const DEFAULT_YEAR_FROM = Math.max(2001, CURRENT_YEAR - 20);
@@ -97,7 +97,7 @@ export default function SeasonalityTab({ setStatus }) {
         // Auto-run once with the default config, so the user sees output first.
         runTest({ tickersOverride: [...defaultSectors] });
       } catch (e) {
-        setStatus({ type: "error", text: `No se pudo cargar el universo de activos: ${e.message}` });
+        setStatus({ type: "error", text: `Could not load the asset universe: ${e.message}` });
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -109,7 +109,7 @@ export default function SeasonalityTab({ setStatus }) {
   }, [universeType, selectedSectors, selectedCountries, manualTickers]);
 
   // If the user trims the universe down (e.g. to just 2 sectors to compare head-to-head),
-  // a stale higher "mínimo de activos/año" would silently zero out every year's stats —
+  // a stale higher "min assets/year" would silently zero out every year's stats —
   // clamp it down automatically so a 2-asset comparison actually produces numbers. Never
   // raises it back up on its own, so a deliberately strict threshold on a big universe is
   // left alone when more assets get added later.
@@ -140,7 +140,7 @@ export default function SeasonalityTab({ setStatus }) {
   async function runTest({ tickersOverride } = {}) {
     const tickers = tickersOverride || activeTickers;
     if (tickers.length < 2) {
-      setStatus({ type: "error", text: "Elegí al menos 2 activos." });
+      setStatus({ type: "error", text: "Pick at least 2 assets." });
       return;
     }
     setTestLoading(true);
@@ -158,7 +158,7 @@ export default function SeasonalityTab({ setStatus }) {
       });
       setTestResult(result);
     } catch (e) {
-      setStatus({ type: "error", text: `Falló el test: ${e.message}` });
+      setStatus({ type: "error", text: `Test failed: ${e.message}` });
     } finally {
       setTestLoading(false);
     }
@@ -166,7 +166,7 @@ export default function SeasonalityTab({ setStatus }) {
 
   async function runSweep() {
     if (activeTickers.length < 2) {
-      setStatus({ type: "error", text: "Elegí al menos 2 activos para el barrido de ventanas." });
+      setStatus({ type: "error", text: "Pick at least 2 assets for the window sweep." });
       return;
     }
     setSweepLoading(true);
@@ -182,7 +182,7 @@ export default function SeasonalityTab({ setStatus }) {
       });
       setSweepResult(result);
     } catch (e) {
-      setStatus({ type: "error", text: `Falló el barrido de ventanas: ${e.message}` });
+      setStatus({ type: "error", text: `Window sweep failed: ${e.message}` });
     } finally {
       setSweepLoading(false);
     }
@@ -197,19 +197,19 @@ export default function SeasonalityTab({ setStatus }) {
 
   async function runMonteCarlo() {
     if (mcUniverses.size === 0) {
-      setStatus({ type: "error", text: "Elegí al menos un universo (sectores y/o países) para el Monte Carlo." });
+      setStatus({ type: "error", text: "Pick at least one universe (sectors and/or countries) for the Monte Carlo." });
       return;
     }
     if (mcLengths.size === 0) {
-      setStatus({ type: "error", text: "Elegí al menos una duración de ventana para probar." });
+      setStatus({ type: "error", text: "Pick at least one window length to test." });
       return;
     }
     if (mcYearFrom > mcYearTo) {
-      setStatus({ type: "error", text: "El año inicial del Monte Carlo no puede ser mayor que el año final." });
+      setStatus({ type: "error", text: "The Monte Carlo's start year can't be greater than the end year." });
       return;
     }
     if ((mcMode === "FIXED" || mcMode === "ROTATING_SUBSET") && (!mcFixedSize || mcFixedSize < 2)) {
-      setStatus({ type: "error", text: "Para este modo, elegí una cantidad de activos de al menos 2." });
+      setStatus({ type: "error", text: "For this mode, pick a number of assets of at least 2." });
       return;
     }
     setMcLoading(true);
@@ -230,7 +230,7 @@ export default function SeasonalityTab({ setStatus }) {
       });
       setMcResult(result);
     } catch (e) {
-      setStatus({ type: "error", text: `Falló el Monte Carlo: ${e.message}` });
+      setStatus({ type: "error", text: `Monte Carlo run failed: ${e.message}` });
     } finally {
       setMcLoading(false);
     }
@@ -239,40 +239,40 @@ export default function SeasonalityTab({ setStatus }) {
   return (
     <div>
       <div style={ui.card}>
-        <h2 style={ui.cardTitle}>Laboratorio de hipótesis de estacionalidad</h2>
+        <h2 style={ui.cardTitle}>Seasonality Hypothesis Lab</h2>
         <p style={ui.cardSubtitle}>
-          ¿Los activos que rentan mejor en una ventana temprana del año terminan liderando el resto del año? Elegí un
-          universo, una fuente de datos, y una ventana de señal (por defecto enero-febrero) para probarlo.
+          Do assets that outperform in an early window of the year go on to lead the rest of the year? Pick a
+          universe, a data source, and a signal window (January-February by default) to test it.
         </p>
       </div>
 
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
         {/* Universe picker */}
         <div style={{ ...ui.card, flex: 1, minWidth: 300 }}>
-          <h3 style={ui.cardTitle}>Universo</h3>
+          <h3 style={ui.cardTitle}>Universe</h3>
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
             <button
               style={ui.button(universeType === "SECTOR" ? "primary" : "secondary")}
               onClick={() => setUniverseType("SECTOR")}
             >
-              Sectores
+              Sectors
             </button>
             <button
               style={ui.button(universeType === "COUNTRY" ? "primary" : "secondary")}
               onClick={() => setUniverseType("COUNTRY")}
             >
-              Países
+              Countries
             </button>
           </div>
 
           {universeType === "COUNTRY" && (
             <div style={{ display: "flex", gap: 12, marginBottom: 10, alignItems: "center" }}>
-              <span style={{ fontSize: 13, color: colors.textMuted }}>Divisa:</span>
+              <span style={{ fontSize: 13, color: colors.textMuted }}>Currency:</span>
               <button style={ui.button(currencyMode === "USD" ? "primary" : "secondary")} onClick={() => setCurrencyMode("USD")}>
                 USD
               </button>
               <button style={ui.button(currencyMode === "LOCAL" ? "primary" : "secondary")} onClick={() => setCurrencyMode("LOCAL")}>
-                Moneda local
+                Local currency
               </button>
             </div>
           )}
@@ -293,13 +293,13 @@ export default function SeasonalityTab({ setStatus }) {
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <input
               style={{ ...ui.input, flex: 1 }}
-              placeholder="Ticker manual, ej. NVDA"
+              placeholder="Manual ticker, e.g. NVDA"
               value={manualTicker}
               onChange={(e) => setManualTicker(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addManualTicker()}
             />
             <button style={ui.button("secondary")} onClick={addManualTicker}>
-              + Agregar
+              + Add
             </button>
           </div>
           {manualTickers.length > 0 && (
@@ -311,19 +311,19 @@ export default function SeasonalityTab({ setStatus }) {
               ))}
             </div>
           )}
-          <p style={{ ...ui.muted, marginTop: 10 }}>{activeTickers.length} activos seleccionados.</p>
+          <p style={{ ...ui.muted, marginTop: 10 }}>{activeTickers.length} assets selected.</p>
         </div>
 
         {/* Test config */}
         <div style={{ ...ui.card, flex: 1, minWidth: 300 }}>
-          <h3 style={ui.cardTitle}>Configuración</h3>
+          <h3 style={ui.cardTitle}>Configuration</h3>
           <div style={ui.row}>
             <label style={ui.label}>
-              Fuente de datos
+              Data source
               <select style={ui.input} value={dataSource} onChange={(e) => setDataSource(e.target.value)}>
                 {sources.map((s) => (
                   <option key={s.id} value={s.id} disabled={!s.available}>
-                    {s.name} {!s.available ? "(próximamente)" : ""}
+                    {s.name} {!s.available ? "(coming soon)" : ""}
                   </option>
                 ))}
               </select>
@@ -331,17 +331,17 @@ export default function SeasonalityTab({ setStatus }) {
           </div>
           <div style={{ ...ui.row, marginTop: 10 }}>
             <label style={ui.label}>
-              Años desde
+              Years from
               <input style={ui.input} type="number" value={yearFrom} onChange={(e) => setYearFrom(Number(e.target.value))} />
             </label>
             <label style={ui.label}>
-              Años hasta
+              Years to
               <input style={ui.input} type="number" value={yearTo} onChange={(e) => setYearTo(Number(e.target.value))} />
             </label>
           </div>
           <div style={{ ...ui.row, marginTop: 10 }}>
             <label style={ui.label}>
-              Ventana de señal — mes inicio
+              Signal window — start month
               <select style={ui.input} value={signalStartMonth} onChange={(e) => setSignalStartMonth(Number(e.target.value))}>
                 {MONTH_NAMES.map((m, i) => (
                   <option key={i} value={i + 1}>
@@ -351,7 +351,7 @@ export default function SeasonalityTab({ setStatus }) {
               </select>
             </label>
             <label style={ui.label}>
-              Duración (meses)
+              Length (months)
               <select style={ui.input} value={signalLengthMonths} onChange={(e) => setSignalLengthMonths(Number(e.target.value))}>
                 {[1, 2, 3].map((n) => (
                   <option key={n} value={n}>
@@ -363,7 +363,7 @@ export default function SeasonalityTab({ setStatus }) {
           </div>
           <div style={{ ...ui.row, marginTop: 10 }}>
             <label style={ui.label}>
-              Mínimo de activos/año
+              Min assets/year
               <input
                 style={ui.input}
                 type="number"
@@ -375,17 +375,17 @@ export default function SeasonalityTab({ setStatus }) {
           </div>
           {activeTickers.length === 2 && (
             <p style={{ ...ui.muted, marginTop: 10 }}>
-              Con solo 2 activos el "cuartil superior" es directamente el que ganó ese año — es una comparación
-              cabeza a cabeza, no una estadística de cuartiles propiamente dicha.
+              With only 2 assets the "top quartile" is simply whichever one won that year — it's a
+              head-to-head comparison, not a proper quartile statistic.
             </p>
           )}
 
           <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
             <button style={ui.button("primary")} onClick={() => runTest()} disabled={testLoading}>
-              {testLoading ? "Corriendo…" : "Correr test"}
+              {testLoading ? "Running…" : "Run test"}
             </button>
             <button style={ui.button("secondary")} onClick={runSweep} disabled={sweepLoading}>
-              {sweepLoading ? "Corriendo…" : "Barrido de ventanas"}
+              {sweepLoading ? "Running…" : "Window sweep"}
             </button>
           </div>
         </div>
@@ -433,7 +433,7 @@ function DataBadge({ meta }) {
         {meta.yearFrom}–{meta.yearTo}
       </span>
       <span style={ui.badge("primary")}>
-        Señal: {MONTH_NAMES[meta.signalStartMonth - 1]}–
+        Signal: {MONTH_NAMES[meta.signalStartMonth - 1]}–
         {MONTH_NAMES[(meta.signalStartMonth - 1 + meta.signalLengthMonths - 1) % 12]}
       </span>
     </div>
@@ -453,17 +453,17 @@ function CoverageStrip({ coverage, tickers, yearFrom, yearTo }) {
       return {
         label: covered ? "✓" : "",
         color: !covered ? colors.surfaceAlt : flagged ? colors.warningSoft : colors.successSoft,
-        title: `${t} ${y}: ${covered ? "con datos" : "sin datos"}${flagged ? " — año con pocos activos" : ""}`,
+        title: `${t} ${y}: ${covered ? "has data" : "no data"}${flagged ? " — year with too few assets" : ""}`,
       };
     })
   );
 
   return (
     <div style={ui.card}>
-      <h3 style={ui.cardTitle}>Cobertura de datos</h3>
+      <h3 style={ui.cardTitle}>Data coverage</h3>
       <p style={ui.cardSubtitle}>
-        Años en <span style={{ background: colors.warningSoft, padding: "0 4px" }}>amarillo</span> tienen menos activos
-        con datos que el mínimo configurado — se excluyen de las estadísticas.
+        Years in <span style={{ background: colors.warningSoft, padding: "0 4px" }}>yellow</span> have fewer assets
+        with data than the configured minimum — they're excluded from the statistics.
       </p>
       <div style={ui.tableScroll}>
         <HeatmapGrid rowLabels={tickers} colLabels={years} cells={cells} cellWidth={34} rowLabelWidth={70} />
@@ -487,21 +487,21 @@ function PersistenceTable({ persistenceRest, persistenceFullYear }) {
       <table style={ui.table}>
         <thead>
           <tr>
-            <th style={ui.th}>Comparación</th>
-            <th style={ui.th}>Persistencia observada</th>
-            <th style={ui.th}>Esperado al azar</th>
-            <th style={ui.th}>Años usados</th>
+            <th style={ui.th}>Comparison</th>
+            <th style={ui.th}>Observed persistence</th>
+            <th style={ui.th}>Expected by chance</th>
+            <th style={ui.th}>Years used</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td style={ui.td}>Resto del año</td>
+            <td style={ui.td}>Rest of year</td>
             <td style={{ ...ui.td, fontWeight: 700 }}>{pct(persistenceRest.average)}</td>
             <td style={ui.td}>{pct(persistenceRest.expectedRandom)}</td>
             <td style={ui.td}>{persistenceRest.yearsUsed}</td>
           </tr>
           <tr>
-            <td style={ui.td}>Año completo</td>
+            <td style={ui.td}>Full year</td>
             <td style={{ ...ui.td, fontWeight: 700 }}>{pct(persistenceFullYear.average)}</td>
             <td style={ui.td}>{pct(persistenceFullYear.expectedRandom)}</td>
             <td style={ui.td}>{persistenceFullYear.yearsUsed}</td>
@@ -513,9 +513,9 @@ function PersistenceTable({ persistenceRest, persistenceFullYear }) {
 }
 
 const HEATMAP_FIELD_META = {
-  signalReturn: { auditField: "signalAudit", label: "Retorno — ventana de señal" },
-  restReturn: { auditField: "restAudit", label: "Retorno — resto del año" },
-  fullYearReturn: { auditField: "fullYearAudit", label: "Retorno — año completo" },
+  signalReturn: { auditField: "signalAudit", label: "Return — signal window" },
+  restReturn: { auditField: "restAudit", label: "Return — rest of year" },
+  fullYearReturn: { auditField: "fullYearAudit", label: "Return — full year" },
 };
 
 function RankingHeatmaps({ panel, tickers, yearFrom, yearTo, onAudit }) {
@@ -548,8 +548,8 @@ function RankingHeatmaps({ panel, tickers, yearFrom, yearTo, onAudit }) {
           label: v === null || v === undefined ? "" : `${isWinner ? "*" : ""}${(v * 100).toFixed(0)}%`,
           color: v === null || v === undefined ? colors.surfaceAlt : divergingColor(v, 0.4),
           title: p
-            ? `${t} ${y}: ${(v * 100).toFixed(1)}%${isWinner ? " — ganador de la ventana de señal ese año" : ""} — click para auditar`
-            : "sin datos",
+            ? `${t} ${y}: ${(v * 100).toFixed(1)}%${isWinner ? " — won the signal window that year" : ""} — click to audit`
+            : "no data",
           onClick:
             componentAudit && componentAudit.value !== null
               ? () => onAudit({ title: `${t} · ${y}`, subtitle: label, components: [componentAudit] })
@@ -563,7 +563,7 @@ function RankingHeatmaps({ panel, tickers, yearFrom, yearTo, onAudit }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div>
         <h4 style={{ margin: "0 0 8px 0", fontSize: 14 }}>
-          Retorno — ventana de señal <span style={{ fontWeight: 400, color: colors.textMuted }}>(* = ganador del año)</span>
+          Return — signal window <span style={{ fontWeight: 400, color: colors.textMuted }}>(* = year's winner)</span>
         </h4>
         <div style={ui.tableScroll}>
           <HeatmapGrid
@@ -576,18 +576,18 @@ function RankingHeatmaps({ panel, tickers, yearFrom, yearTo, onAudit }) {
         </div>
       </div>
       <div>
-        <h4 style={{ margin: "0 0 8px 0", fontSize: 14 }}>Retorno — resto del año</h4>
+        <h4 style={{ margin: "0 0 8px 0", fontSize: 14 }}>Return — rest of year</h4>
         <div style={ui.tableScroll}>
           <HeatmapGrid rowLabels={tickers} colLabels={years} cells={buildCells("restReturn")} cellWidth={44} rowLabelWidth={70} />
         </div>
       </div>
       <div>
-        <h4 style={{ margin: "0 0 8px 0", fontSize: 14 }}>Retorno — año completo</h4>
+        <h4 style={{ margin: "0 0 8px 0", fontSize: 14 }}>Return — full year</h4>
         <div style={ui.tableScroll}>
           <HeatmapGrid rowLabels={tickers} colLabels={years} cells={buildCells("fullYearReturn")} cellWidth={44} rowLabelWidth={70} />
         </div>
       </div>
-      <p style={{ ...ui.muted, margin: 0 }}>Click en cualquier celda con valor para ver el cálculo exacto (fechas y precios usados).</p>
+      <p style={{ ...ui.muted, margin: 0 }}>Click any cell with a value to see the exact calculation (dates and prices used).</p>
     </div>
   );
 }
@@ -619,14 +619,14 @@ function DiffScoreRow({ perYear, diffKey, cumulative, strategyCumKey, benchmarkC
         }}
       >
         <div style={{ fontWeight: 700, color: colors.text }}>
-          {positive}/{rows.length} años con diferencial positivo ({pctPositive}%)
+          {positive}/{rows.length} years with a positive differential ({pctPositive}%)
         </div>
         {hasAlpha && (
           <div style={{ marginTop: 4, fontWeight: 700, color: totalAlpha >= 0 ? colors.success : colors.danger }}>
-            Alfa total generado: {totalAlpha >= 0 ? "+" : ""}
+            Total alpha generated: {totalAlpha >= 0 ? "+" : ""}
             {pct(totalAlpha)}{" "}
             <span style={{ fontWeight: 400, color: colors.textMuted }}>
-              (rentabilidad acumulada de todo el período: cuartil superior menos benchmark)
+              (cumulative return over the whole period: top quartile minus benchmark)
             </span>
           </div>
         )}
@@ -651,70 +651,70 @@ function TestResults({ result, onAudit }) {
       <div style={ui.card}>
         <DataBadge meta={meta} />
         <p style={ui.muted}>
-          El p-value de la correlación contra "año completo" suele salir más bajo (más "significativo") porque la
-          ventana de señal ya es parte del año completo — eso es aritmética, no persistencia. La comparación contra
-          "resto del año" es la que aísla si el efecto persiste una vez terminada la ventana de señal.
+          The p-value of the correlation against "full year" tends to come out lower (more "significant") because the
+          signal window is already part of the full year — that's arithmetic, not persistence. The comparison against
+          "rest of year" is the one that isolates whether the effect persists once the signal window ends.
         </p>
       </div>
 
       <CoverageStrip coverage={coverage} tickers={tickers} yearFrom={meta.yearFrom} yearTo={meta.yearTo} />
 
       <div style={ui.card}>
-        <h3 style={ui.cardTitle}>Heatmap de retornos por año</h3>
+        <h3 style={ui.cardTitle}>Return heatmap by year</h3>
         <RankingHeatmaps panel={panel} tickers={tickers} yearFrom={meta.yearFrom} yearTo={meta.yearTo} onAudit={onAudit} />
       </div>
 
       <div style={ui.card}>
-        <h3 style={ui.cardTitle}>Correlación señal vs. comparación (Spearman)</h3>
+        <h3 style={ui.cardTitle}>Signal vs. comparison correlation (Spearman)</h3>
         <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
           <CorrelationBlock
-            title="Señal vs. resto del año"
+            title="Signal vs. rest of year"
             corr={correlationVsRest}
             points={restPoints}
-            xLabel="Retorno ventana de señal"
-            yLabel="Retorno resto del año"
+            xLabel="Signal window return"
+            yLabel="Rest of year return"
           />
           <CorrelationBlock
-            title="Señal vs. año completo"
+            title="Signal vs. full year"
             corr={correlationVsFullYear}
             points={fullYearPoints}
-            xLabel="Retorno ventana de señal"
-            yLabel="Retorno año completo"
+            xLabel="Signal window return"
+            yLabel="Full year return"
           />
         </div>
       </div>
 
       <div style={ui.card}>
-        <h3 style={ui.cardTitle}>Persistencia de cuartiles</h3>
+        <h3 style={ui.cardTitle}>Quartile persistence</h3>
         <p style={ui.cardSubtitle}>
-          % de los activos en el cuartil superior de la ventana de señal que se mantiene en el cuartil superior de la
-          ventana de comparación. 25% es lo esperado si no hay relación.
+          % of assets in the top quartile of the signal window that stay in the top quartile of the
+          comparison window. 25% is what's expected if there's no relationship.
         </p>
         <PersistenceTable persistenceRest={persistenceVsRest} persistenceFullYear={persistenceVsFullYear} />
       </div>
 
       <div style={ui.card}>
-        <h3 style={ui.cardTitle}>Rendimiento de la estrategia</h3>
+        <h3 style={ui.cardTitle}>Strategy performance</h3>
         <p style={ui.cardSubtitle}>
-          Cartera equiponderada del cuartil superior por señal, comprada al terminar la ventana de señal y mantenida
-          hasta fin de año, contra el universo equiponderado completo en el mismo período (evita look-ahead bias). S&amp;P
-          500 (SPY) y MSCI World (URTH) se agregan como referencia fija, con la misma metodología — siempre en USD, sin
-          importar la divisa del test.
+          Equal-weighted portfolio of the top quartile by signal, bought at the end of the signal window and held
+          through year-end, against the full equal-weighted universe over the same period (avoids look-ahead bias). S&amp;P
+          500 (SPY) and MSCI World (URTH) are added as a fixed benchmark, using the same methodology — always in USD,
+          regardless of the test's currency.
           {!strategy.sp500Available || !strategy.msciWorldAvailable ? (
             <>
               {" "}
-              {!strategy.sp500Available && "S&P 500 no se muestra"}
-              {!strategy.sp500Available && !strategy.msciWorldAvailable && " y "}
-              {!strategy.msciWorldAvailable && "MSCI World (URTH, cotiza desde 2012) no se muestra"} porque no tiene
-              datos para todo el rango de años pedido.
+              {!strategy.sp500Available && "S&P 500 is not shown"}
+              {!strategy.sp500Available && !strategy.msciWorldAvailable && " and "}
+              {!strategy.msciWorldAvailable && "MSCI World (URTH, trading since 2012) is not shown"} because it doesn't
+              have data for the whole requested year range.
             </>
           ) : null}
         </p>
         <LineChart
           points={strategy.cumulative}
           series={[
-            { key: "cumulativeStrategy", label: "Cuartil superior", color: colors.primary },
-            { key: "cumulativeBenchmark", label: "Universo", color: colors.textMuted },
+            { key: "cumulativeStrategy", label: "Top quartile", color: colors.primary },
+            { key: "cumulativeBenchmark", label: "Universe", color: colors.textMuted },
             ...(strategy.sp500Available ? [{ key: "cumulativeSp500", label: "S&P 500", color: colors.warning }] : []),
             ...(strategy.msciWorldAvailable ? [{ key: "cumulativeMsciWorld", label: "MSCI World", color: "#a78bfa" }] : []),
           ]}
@@ -724,15 +724,15 @@ function TestResults({ result, onAudit }) {
           <table style={ui.table}>
             <thead>
               <tr>
-                <th style={ui.th}>Serie</th>
-                <th style={ui.th}>Volatilidad anualizada</th>
-                <th style={ui.th}>Máximo drawdown</th>
+                <th style={ui.th}>Series</th>
+                <th style={ui.th}>Annualized volatility</th>
+                <th style={ui.th}>Maximum drawdown</th>
               </tr>
             </thead>
             <tbody>
               {[
-                { key: "strategy", label: "Cuartil superior", show: true },
-                { key: "benchmark", label: "Universo", show: true },
+                { key: "strategy", label: "Top quartile", show: true },
+                { key: "benchmark", label: "Universe", show: true },
                 { key: "sp500", label: "S&P 500", show: strategy.sp500Available },
                 { key: "msciWorld", label: "MSCI World", show: strategy.msciWorldAvailable },
               ]
@@ -750,21 +750,21 @@ function TestResults({ result, onAudit }) {
           </table>
         </div>
         <p style={ui.muted}>
-          Volatilidad = desviación estándar de los retornos DIARIOS reales de la cartera equiponderada durante los
-          períodos que efectivamente se mantiene cada año, anualizada (×√252) — no un promedio de retornos anuales.
-          Máximo drawdown = la mayor caída desde un pico hasta un valle en la curva acumulada de cada serie (columna
-          "Drawdown" en las tablas de abajo para ver año por año).
+          Volatility = standard deviation of the equal-weighted portfolio's actual DAILY returns over the
+          periods it's actually held each year, annualized (×√252) — not an average of yearly returns.
+          Maximum drawdown = the largest drop from a peak to a trough in each series' cumulative curve (see the
+          "Drawdown" column in the tables below for a year-by-year view).
         </p>
 
         <div style={{ ...ui.tableScroll, marginTop: 12 }}>
           <table style={ui.table}>
             <thead>
               <tr>
-                <th style={ui.th}>Año</th>
-                <th style={ui.th}>Cuartil superior</th>
-                <th style={ui.th}>Universo</th>
-                <th style={ui.th}>Diferencial</th>
-                <th style={ui.th}>Max Drawdown (cuartil sup.)</th>
+                <th style={ui.th}>Year</th>
+                <th style={ui.th}>Top quartile</th>
+                <th style={ui.th}>Universe</th>
+                <th style={ui.th}>Differential</th>
+                <th style={ui.th}>Max Drawdown (top quartile)</th>
               </tr>
             </thead>
             <tbody>
@@ -773,18 +773,18 @@ function TestResults({ result, onAudit }) {
                   <td style={ui.td}>{r.year}</td>
                   <td
                     style={{ ...ui.td, ...auditableCell }}
-                    title="Click para auditar este número"
+                    title="Click to audit this number"
                     onClick={() =>
-                      onAudit({ title: `Cuartil superior · ${r.year}`, subtitle: "Retorno resto del año (equiponderado)", components: r.strategyReturnAudit })
+                      onAudit({ title: `Top quartile · ${r.year}`, subtitle: "Rest of year return (equal-weighted)", components: r.strategyReturnAudit })
                     }
                   >
                     {pct(r.strategyReturn)}
                   </td>
                   <td
                     style={{ ...ui.td, ...auditableCell }}
-                    title="Click para auditar este número"
+                    title="Click to audit this number"
                     onClick={() =>
-                      onAudit({ title: `Universo · ${r.year}`, subtitle: "Retorno resto del año (equiponderado, todo el universo)", components: r.benchmarkReturnAudit })
+                      onAudit({ title: `Universe · ${r.year}`, subtitle: "Rest of year return (equal-weighted, full universe)", components: r.benchmarkReturnAudit })
                     }
                   >
                     {pct(r.benchmarkReturn)}
@@ -815,11 +815,11 @@ function TestResults({ result, onAudit }) {
             <table style={ui.table}>
               <thead>
                 <tr>
-                  <th style={ui.th}>Año</th>
-                  <th style={ui.th}>Cuartil superior</th>
+                  <th style={ui.th}>Year</th>
+                  <th style={ui.th}>Top quartile</th>
                   <th style={ui.th}>S&amp;P 500</th>
-                  <th style={ui.th}>Diferencial</th>
-                  <th style={ui.th}>Max Drawdown (cuartil sup.)</th>
+                  <th style={ui.th}>Differential</th>
+                  <th style={ui.th}>Max Drawdown (top quartile)</th>
                   <th style={ui.th}>Max Drawdown (S&amp;P 500)</th>
                 </tr>
               </thead>
@@ -829,18 +829,18 @@ function TestResults({ result, onAudit }) {
                     <td style={ui.td}>{r.year}</td>
                     <td
                       style={{ ...ui.td, ...auditableCell }}
-                      title="Click para auditar este número"
+                      title="Click to audit this number"
                       onClick={() =>
-                        onAudit({ title: `Cuartil superior · ${r.year}`, subtitle: "Retorno resto del año (equiponderado)", components: r.strategyReturnAudit })
+                        onAudit({ title: `Top quartile · ${r.year}`, subtitle: "Rest of year return (equal-weighted)", components: r.strategyReturnAudit })
                       }
                     >
                       {pct(r.strategyReturn)}
                     </td>
                     <td
                       style={{ ...ui.td, ...auditableCell }}
-                      title="Click para auditar este número"
+                      title="Click to audit this number"
                       onClick={() =>
-                        onAudit({ title: `S&P 500 · ${r.year}`, subtitle: "Retorno resto del año (SPY, USD)", components: r.sp500ReturnAudit })
+                        onAudit({ title: `S&P 500 · ${r.year}`, subtitle: "Rest of year return (SPY, USD)", components: r.sp500ReturnAudit })
                       }
                     >
                       {pct(r.sp500Return)}
@@ -882,34 +882,34 @@ function SweepResults({ result }) {
   const grid = MONTH_NAMES.map((_, monthIdx) =>
     lengths.map((len) => {
       const c = byKey.get(`${monthIdx + 1}-${len}`);
-      if (!c) return { label: "—", color: colors.surfaceAlt, title: "ventana cruza fin de año — excluida" };
+      if (!c) return { label: "—", color: colors.surfaceAlt, title: "window crosses year-end — excluded" };
       return {
-        label: c.rho === null ? "n/d" : c.rho.toFixed(2),
+        label: c.rho === null ? "n/a" : c.rho.toFixed(2),
         color: c.rho === null ? colors.surfaceAlt : divergingColor(c.rho, 0.5),
-        title: `Inicio ${MONTH_NAMES[monthIdx]}, ${len} mes(es): ρ=${c.rho?.toFixed(3) ?? "n/d"} (n=${c.n})`,
+        title: `Start ${MONTH_NAMES[monthIdx]}, ${len} month(s): ρ=${c.rho?.toFixed(3) ?? "n/a"} (n=${c.n})`,
       };
     })
   );
 
   return (
     <div style={ui.card}>
-      <h3 style={ui.cardTitle}>Barrido de ventanas</h3>
+      <h3 style={ui.cardTitle}>Window sweep</h3>
       <p style={ui.cardSubtitle}>
-        Correlación de Spearman (señal vs. resto del año) para ventanas de 1, 2 y 3 meses empezando en cada mes. Si
-        enero-febrero se destaca frente al resto, el efecto es estacional; si todas las ventanas de 2 meses se
-        parecen, es momentum genérico.
+        Spearman correlation (signal vs. rest of year) for 1, 2, and 3-month windows starting in each month. If
+        January-February stands out from the rest, the effect is seasonal; if all 2-month windows look
+        alike, it's generic momentum.
       </p>
       <div style={ui.tableScroll}>
         <HeatmapGrid
           rowLabels={MONTH_NAMES}
-          colLabels={["1 mes", "2 meses", "3 meses"]}
+          colLabels={["1 month", "2 months", "3 months"]}
           cells={grid}
           cellWidth={70}
           rowLabelWidth={50}
         />
       </div>
       <p style={{ ...ui.muted, marginTop: 8 }}>
-        Fuente: {meta.source} · {meta.yearFrom}–{meta.yearTo} · {meta.comparison}
+        Source: {meta.source} · {meta.yearFrom}–{meta.yearTo} · {meta.comparison}
       </p>
     </div>
   );
@@ -943,17 +943,17 @@ function MonteCarloSection({
   const defaultMinYears = Math.max(2, Math.round((mcYearTo - mcYearFrom + 1) / 2));
   return (
     <div style={ui.card}>
-      <h2 style={ui.cardTitle}>Optimización combinatoria (Monte Carlo)</h2>
+      <h2 style={ui.cardTitle}>Combinatorial optimization (Monte Carlo)</h2>
       <p style={ui.cardSubtitle}>
-        Prueba TODAS las combinaciones válidas de universo (sectores y/o países — nunca mezclados en una misma
-        cartera) × ventana de señal (mes de inicio × duración), y las ordena por retorno ajustado por riesgo (CAGR ÷
-        volatilidad) para encontrar cuál habría dado, históricamente, más rentabilidad con menos volatilidad. Es un
-        barrido exhaustivo — evalúa cada combinación posible, no una muestra aleatoria — pero lo llamamos "Monte
-        Carlo" siguiendo el pedido. Siempre en USD, para poder comparar sectores y países en una sola tabla.
+        Tests EVERY valid combination of universe (sectors and/or countries — never mixed in the same
+        portfolio) × signal window (start month × length), and ranks them by risk-adjusted return (CAGR ÷
+        volatility) to find which one would historically have delivered the most return for the least volatility. It's
+        an exhaustive sweep — it evaluates every possible combination, not a random sample — but we call it "Monte
+        Carlo" as requested. Always in USD, so sectors and countries can be compared in one table.
       </p>
 
       <div style={{ marginBottom: 16 }}>
-        <p style={{ fontSize: 13, color: colors.textMuted, margin: "0 0 6px 0", fontWeight: 600 }}>Modo de selección de activos</p>
+        <p style={{ fontSize: 13, color: colors.textMuted, margin: "0 0 6px 0", fontWeight: 600 }}>Asset selection mode</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, cursor: "pointer" }}>
             <input
@@ -964,11 +964,11 @@ function MonteCarloSection({
               style={{ marginTop: 2 }}
             />
             <span>
-              <strong>Rotar cuartil superior de todo el universo</strong>
+              <strong>Rotate top quartile across the whole universe</strong>
               <br />
               <span style={{ color: colors.textMuted }}>
-                Re-elige el cuartil superior por señal de TODO el universo, todos los años (como la estrategia
-                principal de arriba).
+                Re-picks the top quartile by signal from the WHOLE universe, every year (same as the main
+                strategy above).
               </span>
             </span>
           </label>
@@ -981,13 +981,13 @@ function MonteCarloSection({
               style={{ marginTop: 2 }}
             />
             <span>
-              <strong>Rotar el ganador dentro de un grupo elegido</strong>
+              <strong>Rotate the winner within a chosen group</strong>
               <br />
               <span style={{ color: colors.textMuted }}>
-                Elegí cuántos activos (2, 3, 4…) y busca, entre TODAS las combinaciones posibles de ese tamaño, el
-                grupo donde "quedarme siempre con el/los que mejor vinieron viniendo en la señal" dio mejor
-                resultado. Con 2 activos reproduce "siempre el ganador entre estos dos", probado para cada par
-                posible — no uno elegido a mano.
+                Pick how many assets (2, 3, 4…) and it searches, among EVERY possible combination of that size, for
+                the group where "always keep whichever came out ahead on signal" performed best. With 2 assets this
+                reproduces "always the winner between these two," tested for every possible pair — not one picked
+                by hand.
               </span>
             </span>
           </label>
@@ -1000,11 +1000,11 @@ function MonteCarloSection({
               style={{ marginTop: 2 }}
             />
             <span>
-              <strong>Cartera fija (sin rotación)</strong>
+              <strong>Fixed portfolio (no rotation)</strong>
               <br />
               <span style={{ color: colors.textMuted }}>
-                Elegí cuántos activos y busca la combinación que dio mejor resultado manteniendo siempre los MISMOS
-                activos todo el período (no rota entre ellos, los mantiene juntos).
+                Pick how many assets and it searches for the combination that performed best holding the SAME
+                assets for the whole period (no rotation — it keeps them together).
               </span>
             </span>
           </label>
@@ -1013,7 +1013,7 @@ function MonteCarloSection({
 
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
         <div style={{ minWidth: 160 }}>
-          <p style={{ fontSize: 13, color: colors.textMuted, margin: "0 0 6px 0", fontWeight: 600 }}>Universo a explorar</p>
+          <p style={{ fontSize: 13, color: colors.textMuted, margin: "0 0 6px 0", fontWeight: 600 }}>Universe to explore</p>
           {["SECTOR", "COUNTRY"].map((u) => (
             <label key={u} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer", marginBottom: 4 }}>
               <input type="checkbox" checked={mcUniverses.has(u)} onChange={() => toggleInSet(mcUniverses, setMcUniverses, u)} />
@@ -1023,31 +1023,31 @@ function MonteCarloSection({
         </div>
 
         <div style={{ minWidth: 160 }}>
-          <p style={{ fontSize: 13, color: colors.textMuted, margin: "0 0 6px 0", fontWeight: 600 }}>Duración de ventana a probar</p>
+          <p style={{ fontSize: 13, color: colors.textMuted, margin: "0 0 6px 0", fontWeight: 600 }}>Window length to test</p>
           {[1, 2, 3].map((len) => (
             <label key={len} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer", marginBottom: 4 }}>
               <input type="checkbox" checked={mcLengths.has(len)} onChange={() => toggleInSet(mcLengths, setMcLengths, len)} />
-              {len} mes{len > 1 ? "es" : ""}
+              {len} month{len > 1 ? "s" : ""}
             </label>
           ))}
           <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer", marginTop: 8 }}>
             <input type="checkbox" checked={mcForceJanuary} onChange={(e) => setMcForceJanuary(e.target.checked)} />
-            Forzar inicio en enero
+            Force January start
           </label>
         </div>
 
         <div style={ui.row}>
           <label style={ui.label}>
-            Años desde
+            Years from
             <input style={ui.input} type="number" value={mcYearFrom} onChange={(e) => setMcYearFrom(Number(e.target.value))} />
           </label>
           <label style={ui.label}>
-            Años hasta
+            Years to
             <input style={ui.input} type="number" value={mcYearTo} onChange={(e) => setMcYearTo(Number(e.target.value))} />
           </label>
           {needsSize ? (
             <label style={ui.label}>
-              N° de activos
+              No. of assets
               <input
                 style={ui.input}
                 type="number"
@@ -1058,7 +1058,7 @@ function MonteCarloSection({
             </label>
           ) : (
             <label style={ui.label}>
-              Mínimo de activos/año
+              Min assets/year
               <input
                 style={ui.input}
                 type="number"
@@ -1069,7 +1069,7 @@ function MonteCarloSection({
             </label>
           )}
           <label style={ui.label}>
-            Mínimo de años usados
+            Min years used
             <input
               style={ui.input}
               type="number"
@@ -1082,15 +1082,15 @@ function MonteCarloSection({
         </div>
       </div>
       <p style={{ ...ui.muted, marginTop: 10 }}>
-        "Mínimo de años usados" descarta combinaciones armadas con muy pocos años (p. ej. un activo que empezó a
-        cotizar hace poco) — sin ese piso, un resultado con solo 5-7 años de historia puede parecer mejor que otro
-        con 20 años solo por casualidad de muestra chica. Vacío = la mitad del rango de años pedido ({defaultMinYears}
-        {" "}en este caso).
+        "Min years used" discards combinations built on too few years (e.g. an asset that only started
+        trading recently) — without that floor, a result with only 5-7 years of history can look better than one
+        with 20 years just by small-sample luck. Empty = half of the requested year range ({defaultMinYears}
+        {" "}in this case).
       </p>
 
       <div style={{ marginTop: 16 }}>
         <button style={ui.button("primary")} onClick={onRun} disabled={mcLoading}>
-          {mcLoading ? "Corriendo combinaciones…" : "Correr Monte Carlo"}
+          {mcLoading ? "Running combinations…" : "Run Monte Carlo"}
         </button>
       </div>
 
@@ -1108,9 +1108,9 @@ function fixedTickersOf(picksByYear) {
 }
 
 const MODE_LABELS = {
-  ROTATING: "Rotación de todo el universo",
-  ROTATING_SUBSET: `Rotación dentro de un grupo elegido`,
-  FIXED: `Cartera fija`,
+  ROTATING: "Whole-universe rotation",
+  ROTATING_SUBSET: `Rotation within a chosen group`,
+  FIXED: `Fixed portfolio`,
 };
 
 function MonteCarloResults({ result }) {
@@ -1121,9 +1121,9 @@ function MonteCarloResults({ result }) {
   if (!combos || combos.length === 0) {
     return (
       <p style={{ ...ui.muted, marginTop: 16 }}>
-        Ninguna combinación tuvo datos suficientes con esta configuración
+        No combination had enough data with this configuration
         {meta.discardedForShortSample > 0 &&
-          ` (${meta.discardedForShortSample} se descartaron por tener menos de ${meta.minYearsUsed} años de historia — bajá "Mínimo de años usados" si querés verlas)`}
+          ` (${meta.discardedForShortSample} were discarded for having fewer than ${meta.minYearsUsed} years of history — lower "Min years used" if you want to see them)`}
         .
       </p>
     );
@@ -1132,18 +1132,18 @@ function MonteCarloResults({ result }) {
   return (
     <div style={{ marginTop: 20 }}>
       <p style={ui.muted}>
-        {meta.combosEvaluated} combinaciones evaluadas · {meta.source} · {meta.yearFrom}–{meta.yearTo} ·{" "}
+        {meta.combosEvaluated} combinations evaluated · {meta.source} · {meta.yearFrom}–{meta.yearTo} ·{" "}
         {MODE_LABELS[meta.mode] || meta.mode}
-        {(meta.mode === "FIXED" || meta.mode === "ROTATING_SUBSET") && ` de ${meta.fixedSize} activos`}
-        {meta.startMonths && meta.startMonths.length === 1 && meta.startMonths[0] === 1 && " · señal forzada a Enero"}
+        {(meta.mode === "FIXED" || meta.mode === "ROTATING_SUBSET") && ` of ${meta.fixedSize} assets`}
+        {meta.startMonths && meta.startMonths.length === 1 && meta.startMonths[0] === 1 && " · signal forced to January"}
         {meta.discardedForShortSample > 0 &&
-          ` · ${meta.discardedForShortSample} combinación(es) con menos de ${meta.minYearsUsed} años descartadas`}
+          ` · ${meta.discardedForShortSample} combination(s) with fewer than ${meta.minYearsUsed} years discarded`}
       </p>
 
       {best && (
         <div
           onClick={() => setPicksDetail(best)}
-          title={isFixed ? "Click para confirmar los activos elegidos" : "Click para ver qué activos eligió esta combinación cada año"}
+          title={isFixed ? "Click to confirm the chosen assets" : "Click to see which assets this combination picked each year"}
           style={{
             background: colors.primarySoft,
             border: `1px solid ${colors.border}`,
@@ -1155,15 +1155,15 @@ function MonteCarloResults({ result }) {
           }}
         >
           <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: colors.primary }}>
-            Combinación óptima (mayor retorno ajustado por riesgo)
+            Optimal combination (highest risk-adjusted return)
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
-            {UNIVERSE_LABELS[best.universe]} · Señal {windowLabel(best.startMonth, best.lengthMonths)}
+            {UNIVERSE_LABELS[best.universe]} · Signal {windowLabel(best.startMonth, best.lengthMonths)}
           </div>
           {isFixed && (
             <div style={{ marginTop: 8, fontSize: 14 }}>
-              Activos: <strong>{(fixedTickersOf(best.picksByYear) || []).join(", ")}</strong>{" "}
-              <span style={{ color: colors.textMuted, fontWeight: 400 }}>(los mismos todo el período, sin rotar)</span>
+              Assets: <strong>{(fixedTickersOf(best.picksByYear) || []).join(", ")}</strong>{" "}
+              <span style={{ color: colors.textMuted, fontWeight: 400 }}>(the same ones for the whole period, no rotation)</span>
             </div>
           )}
           <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginTop: 10, fontSize: 13.5 }}>
@@ -1171,20 +1171,20 @@ function MonteCarloResults({ result }) {
               CAGR: <strong style={{ color: best.cagr >= 0 ? colors.success : colors.danger }}>{pct(best.cagr)}</strong>
             </span>
             <span>
-              Retorno total: <strong>{pct(best.totalReturn)}</strong>
+              Total return: <strong>{pct(best.totalReturn)}</strong>
             </span>
             <span>
-              Volatilidad: <strong>{pct(best.volatility)}</strong>
+              Volatility: <strong>{pct(best.volatility)}</strong>
             </span>
             <span>
               Max drawdown: <strong style={{ color: colors.danger }}>{pct(best.maxDrawdown)}</strong>
             </span>
             <span>
-              Años usados: <strong>{best.yearsUsed}</strong>
+              Years used: <strong>{best.yearsUsed}</strong>
             </span>
           </div>
           <div style={{ marginTop: 10, fontSize: 12, color: colors.primary, fontWeight: 600 }}>
-            {isFixed ? "Click para confirmar los activos elegidos" : "Click para ver qué activos eligió cada año"}
+            {isFixed ? "Click to confirm the chosen assets" : "Click to see which assets it picked each year"}
           </div>
         </div>
       )}
@@ -1195,15 +1195,15 @@ function MonteCarloResults({ result }) {
         <table style={ui.table}>
           <thead>
             <tr>
-              <th style={ui.th}>Universo</th>
-              <th style={ui.th}>Ventana de señal</th>
+              <th style={ui.th}>Universe</th>
+              <th style={ui.th}>Signal window</th>
               <th style={ui.th}>CAGR</th>
-              <th style={ui.th}>Retorno total</th>
-              <th style={ui.th}>Volatilidad</th>
+              <th style={ui.th}>Total return</th>
+              <th style={ui.th}>Volatility</th>
               <th style={ui.th}>Max Drawdown</th>
               <th style={ui.th}>Score (CAGR/Vol)</th>
-              <th style={ui.th}>Años</th>
-              <th style={ui.th}>Activos</th>
+              <th style={ui.th}>Years</th>
+              <th style={ui.th}>Assets</th>
             </tr>
           </thead>
           <tbody>
@@ -1224,7 +1224,7 @@ function MonteCarloResults({ result }) {
                   {isFixed ? (
                     <span
                       style={{ ...auditableCell, color: colors.text }}
-                      title="Click para confirmar los activos elegidos"
+                      title="Click to confirm the chosen assets"
                       onClick={() => setPicksDetail(c)}
                     >
                       {(fixedTickersOf(c.picksByYear) || []).join(", ")}
@@ -1234,7 +1234,7 @@ function MonteCarloResults({ result }) {
                       style={{ ...ui.button("ghost"), height: "auto", padding: "2px 8px", fontSize: 12.5, color: colors.primary }}
                       onClick={() => setPicksDetail(c)}
                     >
-                      Ver ▸
+                      View ▸
                     </button>
                   )}
                 </td>
@@ -1245,9 +1245,9 @@ function MonteCarloResults({ result }) {
       </div>
 
       <p style={{ ...ui.muted, marginTop: 8 }}>
-        Score = CAGR ÷ volatilidad anualizada (parecido a un Sharpe ratio, pero sin restar la tasa libre de riesgo) —
-        se usa solo para ORDENAR las combinaciones entre sí, no es una métrica financiera estándar por sí sola. Esto
-        es un backtest histórico: no garantiza que la misma combinación vaya a repetirse en el futuro.
+        Score = CAGR ÷ annualized volatility (similar to a Sharpe ratio, but without subtracting the risk-free
+        rate) — used only to RANK combinations against each other, not a standalone standard financial metric. This
+        is a historical backtest: it doesn't guarantee the same combination will repeat in the future.
       </p>
 
       {picksDetail && <ComboPicksDrawer detail={picksDetail} onClose={() => setPicksDetail(null)} />}
@@ -1267,17 +1267,17 @@ function ComboPicksDrawer({ detail, onClose }) {
 
   return (
     <Drawer
-      kicker="Composición de la cartera"
-      title={`${UNIVERSE_LABELS[detail.universe]} · Señal ${windowLabel(detail.startMonth, detail.lengthMonths)}`}
+      kicker="Portfolio composition"
+      title={`${UNIVERSE_LABELS[detail.universe]} · Signal ${windowLabel(detail.startMonth, detail.lengthMonths)}`}
       subtitle={
         isConstant
-          ? "Cartera fija: los mismos activos todos los años, comprados al empezar el mes de 'cartera desde' y mantenidos hasta el 31 de diciembre."
-          : "Activos del cuartil superior por señal que esta combinación eligió cada año — comprados al empezar el mes de 'cartera desde', mantenidos hasta el 31 de diciembre."
+          ? "Fixed portfolio: the same assets every year, bought at the start of the 'holdings from' month and held through December 31."
+          : "Top-quartile-by-signal assets this combination picked each year — bought at the start of the 'holdings from' month, held through December 31."
       }
       onClose={onClose}
     >
       {years.length === 0 ? (
-        <p style={ui.muted}>No hay datos de composición para esta combinación.</p>
+        <p style={ui.muted}>No composition data for this combination.</p>
       ) : isConstant ? (
         <div
           style={{
@@ -1289,7 +1289,7 @@ function ComboPicksDrawer({ detail, onClose }) {
           }}
         >
           <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: colors.textMuted, marginBottom: 6 }}>
-            Todos los años ({years[0]}–{years[years.length - 1]})
+            All years ({years[0]}–{years[years.length - 1]})
           </div>
           <strong>{(detail.picksByYear[years[0]] || []).join(", ")}</strong>
         </div>
@@ -1298,8 +1298,8 @@ function ComboPicksDrawer({ detail, onClose }) {
           <table style={ui.table}>
             <thead>
               <tr>
-                <th style={ui.th}>Año</th>
-                <th style={ui.th}>Activos elegidos</th>
+                <th style={ui.th}>Year</th>
+                <th style={ui.th}>Assets picked</th>
               </tr>
             </thead>
             <tbody>
@@ -1362,7 +1362,7 @@ function ComboScatter({ combos, best }) {
             >
               <title>
                 {UNIVERSE_LABELS[c.universe]} · {windowLabel(c.startMonth, c.lengthMonths)}: CAGR {(c.cagr * 100).toFixed(1)}%, vol{" "}
-                {(c.volatility * 100).toFixed(1)}%{isBest ? " — ÓPTIMO" : ""}
+                {(c.volatility * 100).toFixed(1)}%{isBest ? " — OPTIMAL" : ""}
               </title>
             </circle>
           );
@@ -1371,24 +1371,24 @@ function ComboScatter({ combos, best }) {
         <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} stroke={colors.text} />
         <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} stroke={colors.text} />
         <text x={width / 2} y={height - 6} fontSize="11" fill={colors.textMuted} textAnchor="middle">
-          Volatilidad anualizada
+          Annualized volatility
         </text>
         <text x={14} y={height / 2} fontSize="11" fill={colors.textMuted} textAnchor="middle" transform={`rotate(-90, 14, ${height / 2})`}>
-          CAGR anualizado
+          Annualized CAGR
         </text>
 
         <g transform={`translate(${width - 150}, ${padding.top})`}>
           <circle cx={6} cy={4} r={4} fill={colors.primary} />
           <text x={16} y={8} fontSize="11" fill={colors.textMuted}>
-            Sectores
+            Sectors
           </text>
           <circle cx={6} cy={20} r={4} fill="#a78bfa" />
           <text x={16} y={24} fontSize="11" fill={colors.textMuted}>
-            Países
+            Countries
           </text>
           <circle cx={6} cy={36} r={5} fill={colors.success} stroke="#fff" strokeWidth={1.5} />
           <text x={16} y={40} fontSize="11" fill={colors.textMuted}>
-            Óptimo
+            Optimal
           </text>
         </g>
       </svg>

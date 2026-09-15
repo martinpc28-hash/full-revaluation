@@ -8,7 +8,7 @@ import SeasonalityTab from "./tabs/SeasonalityTab.jsx";
 
 const PORTFOLIOS_KEY = "fullreval.portfolios";
 const CURRENT_KEY = "fullreval.currentPortfolioId";
-const DEFAULT_PORTFOLIOS = [{ id: 1, name: "Cartera principal" }];
+const DEFAULT_PORTFOLIOS = [{ id: 1, name: "Main portfolio" }];
 
 function loadPortfolios() {
   try {
@@ -36,7 +36,7 @@ const TABS = [
   { key: "dashboard", label: "Gráficos y métricas", hidden: true },
   { key: "portfolios", label: "Carteras", hidden: true },
   { key: "scenarios", label: "Escenarios de estrés", hidden: true },
-  { key: "seasonality", label: "Estacionalidad" },
+  { key: "seasonality", label: "Seasonality" },
 ];
 
 export default function App() {
@@ -60,7 +60,7 @@ export default function App() {
       const list = await api.listInstruments(currentPortfolioId);
       setInstruments(list);
     } catch (e) {
-      setStatus({ type: "error", text: `No se pudieron cargar los instrumentos: ${e.message}` });
+      setStatus({ type: "error", text: `Could not load instruments: ${e.message}` });
     }
   }
 
@@ -108,12 +108,12 @@ export default function App() {
       <header style={shell.header}>
         <div style={shell.brand}>
           <div>
-            <p style={shell.brandTitle}>Full Revaluation</p>
-            <p style={shell.brandSubtitle}>Riesgo de mercado por revaluación completa — VaR y escenarios de estrés</p>
+            <p style={shell.brandTitle}>Hypothesis Laboratory</p>
+            <p style={shell.brandSubtitle}>Testing seasonality hypotheses across sectors and countries</p>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={ui.muted}>Cartera activa:</span>
+          <span style={ui.muted}>Active portfolio:</span>
           <select
             style={{ ...ui.input, fontWeight: 600 }}
             value={currentPortfolioId}

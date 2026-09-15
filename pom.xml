@@ -14,8 +14,8 @@
     <groupId>com.martin</groupId>
     <artifactId>full-revaluation</artifactId>
     <version>0.1.0</version>
-    <name>full-revaluation</name>
-    <description>Market risk Full Revaluation engine (bonds + European options) on Oracle DB, deployed on AWS</description>
+    <name>Hypothesis Laboratory</name>
+    <description>Seasonality hypothesis testing lab for sectors and countries, built on top of a full-revaluation market risk engine, deployed on AWS</description>
 
     <properties>
         <java.version>17</java.version>
