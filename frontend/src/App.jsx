@@ -30,17 +30,19 @@ function loadCurrentId(portfolios) {
   }
 }
 
+// Dashboard/Carteras/Escenarios hidden from the tab bar for now (still fully implemented
+// below, just not linked to — flip `hidden` back off whenever they're wanted again).
 const TABS = [
-  { key: "dashboard", label: "Gráficos y métricas" },
-  { key: "portfolios", label: "Carteras" },
-  { key: "scenarios", label: "Escenarios de estrés" },
+  { key: "dashboard", label: "Gráficos y métricas", hidden: true },
+  { key: "portfolios", label: "Carteras", hidden: true },
+  { key: "scenarios", label: "Escenarios de estrés", hidden: true },
   { key: "seasonality", label: "Estacionalidad" },
 ];
 
 export default function App() {
   const [portfolios, setPortfolios] = useState(loadPortfolios);
   const [currentPortfolioId, setCurrentPortfolioId] = useState(() => loadCurrentId(loadPortfolios()));
-  const [activeTab, setActiveTab] = useState("portfolios");
+  const [activeTab, setActiveTab] = useState("seasonality");
   const [instruments, setInstruments] = useState([]);
   const [lastRunByPortfolio, setLastRunByPortfolio] = useState({});
   const [status, setStatus] = useState(null);
@@ -127,7 +129,7 @@ export default function App() {
       </header>
 
       <nav style={shell.tabBar}>
-        {TABS.map((t) => (
+        {TABS.filter((t) => !t.hidden).map((t) => (
           <button key={t.key} style={shell.tabButton(activeTab === t.key)} onClick={() => setActiveTab(t.key)}>
             {t.label}
           </button>
