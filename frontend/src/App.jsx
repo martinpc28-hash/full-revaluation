@@ -109,7 +109,6 @@ export default function App() {
         <div style={shell.brand}>
           <div>
             <p style={shell.brandTitle}>Hypothesis Laboratory</p>
-            <p style={shell.brandSubtitle}>Testing seasonality hypotheses across sectors and countries</p>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
